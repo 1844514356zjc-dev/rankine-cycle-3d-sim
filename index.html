@@ -171,7 +171,14 @@
   canvas.chart{width:100%; height:230px; display:block; border-radius:7px; background:#0a1426;}
 
   .note{font-size:10.5px; color:var(--dim); margin-top:8px; line-height:1.5;}
-  .err{color:var(--hot); font-size:11px; padding:6px 10px; background:rgba(255,107,53,.1); border:1px solid rgba(255,107,53,.4); border-radius:8px; margin-bottom:10px; display:none;}
+  .err{font-size:11px; line-height:1.55; padding:8px 11px; background:rgba(255,107,53,.10); border:1px solid rgba(255,107,53,.4); border-left:3px solid var(--hot); border-radius:8px; margin-bottom:12px; display:none;}
+  .err.sev{background:rgba(255,71,71,.12); border-color:rgba(255,71,71,.5); border-left-color:#ff5050;}
+  .err .et{display:block; font-weight:700; color:var(--hot); margin-bottom:4px;}
+  .err.sev .et{color:#ff6a6a;}
+  .err .ec{display:block; color:var(--text); opacity:.96;}
+  .err .ec b{color:var(--warn);}
+  .err .ef{display:block; color:var(--muted); margin-top:5px; padding-top:5px; border-top:1px dashed rgba(255,255,255,.12);}
+  .err .ef b{color:var(--good);}
 
   .pill{font-size:10px; padding:2px 7px; border-radius:20px; background:#16264a; color:var(--muted); border:1px solid var(--border);}
   .pill.good{background:rgba(54,211,153,.12); color:var(--good); border-color:rgba(54,211,153,.35);}
@@ -969,11 +976,18 @@ function recompute(){
   simState.particleSpeed=0.03+params.mdot/200*0.10;
   simState.flame=Math.min(1.6,0.5+m.qin/3000);
   simState.mdot=params.mdot;
-  // 排汽干度告警
-  const err=$('errBox');
-  if(R.states[4].x<0.88){err.style.display='block';
-    err.textContent='⚠ 排汽干度 x₄='+fmt(R.states[4].x,3)+' 偏低（<0.88），汽轮机末级叶片可能受液滴侵蚀。建议提高过热温度或降低冷凝器压力。';
-  }else err.style.display='none';
+  // 排汽干度告警（教学化：数值 + 为什么 + 工程对策）
+  const err=$('errBox'); const x4=R.states[4].x;
+  if(x4<0.88){
+    const moist=(1-x4)*100, sev=x4<0.80;
+    err.classList.toggle('sev',sev); err.style.display='block';
+    err.innerHTML=
+      '<span class="et">⚠ 排汽干度 x₄='+fmt(x4,3)+' '+(sev?'严重偏低':'偏低')+'（排汽湿度 '+fmt(moist,1)+'%，安全限 x≥0.88）</span>'+
+      '<span class="ec"><b>为什么：</b>蒸汽在汽轮机内从状态3（高压）一路膨胀到冷凝器压力，终点落入饱和线内的湿蒸汽区；'+
+        (params.Pboil>=10?'<b>锅炉压力越高，进汽熵越低，排汽就越湿</b>——这是基本朗肯循环在“高压力 + 高真空”下的固有矛盾。':'过热度不足或膨胀压降过大时尤为明显。')+
+      '</span>'+
+      '<span class="ef"><b>工程对策：</b>真实电厂采用<b>再热循环</b>（高压缸排汽 → 回锅炉再热 → 低压缸），把排汽干度拉回 0.90 以上并提升热效率。本界面可立即尝试：提高过热温度 T₃，或适当降低锅炉压力。</span>';
+  }else{ err.style.display='none'; err.classList.remove('sev'); }
   return R;
 }
 
