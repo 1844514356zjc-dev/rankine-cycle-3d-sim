@@ -795,12 +795,14 @@ function makeLabel(text,yoff,accent){
   accent=(accent===undefined)?0xFF8A1E:accent;
   const W=512,H=128,c=document.createElement('canvas');c.width=W;c.height=H;
   const x=c.getContext('2d');
-  x.fillStyle='rgba(7,15,28,0.95)'; roundRect(x,6,6,W-12,H-12,22); x.fill();
-  x.fillStyle='#'+('000000'+accent.toString(16)).slice(-6); roundRect(x,6,6,16,H-12,7); x.fill();
-  x.strokeStyle='rgba(150,180,225,0.55)';x.lineWidth=2; roundRect(x,6,6,W-12,H-12,22); x.stroke();
-  x.fillStyle='#ffffff';x.font='700 50px -apple-system,Segoe UI,"PingFang SC",sans-serif';
+  x.font='700 54px -apple-system,Segoe UI,"PingFang SC",sans-serif';
   x.textAlign='center';x.textBaseline='middle';
-  x.shadowColor='rgba(0,0,0,0.7)';x.shadowBlur=6; x.fillText(text,W/2+8,H/2);
+  const cx=W/2, cy=H/2;
+  // 背景透明 —— 仅文字：先深色粗描边（任意背景下可读），再投影 + 白色主文字
+  x.lineJoin='round'; x.miterLimit=2;
+  x.lineWidth=13; x.strokeStyle='rgba(4,10,20,0.92)'; x.strokeText(text,cx,cy);
+  x.shadowColor='rgba(0,0,0,0.55)'; x.shadowBlur=5; x.shadowOffsetY=1;
+  x.fillStyle='#ffffff'; x.fillText(text,cx,cy);
   const tex=new THREE.CanvasTexture(c); tex.anisotropy=4;
   const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,depthTest:false}));
   sp.scale.set(3.0,0.75,1); sp.renderOrder=999; sp.position.y=yoff; return sp;
