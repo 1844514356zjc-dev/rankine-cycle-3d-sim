@@ -1,0 +1,947 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>朗肯循环 3D 仿真实验台 · Rankine Cycle Simulator</title>
+<style>
+  :root{
+    --bg:#0A1426; --panel:#101D34; --panel2:#0B1628; --card:#15264a;
+    --border:#243a63; --border2:#1b2c4d;
+    --text:#E7EDF9; --muted:#93a6cc; --dim:#6b7c9e;
+    --accent:#FF8A1E; --accent2:#ffb05c;
+    --hot:#FF6B35; --cold:#3FA7F6; --good:#36D399; --warn:#FFD23F;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{height:100%;}
+  body{
+    background:
+      radial-gradient(1200px 700px at 70% -10%, #142a4d 0%, transparent 60%),
+      radial-gradient(900px 600px at 10% 110%, #10243f 0%, transparent 55%),
+      var(--bg);
+    color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",Roboto,Helvetica,Arial,sans-serif;
+    font-size:13px; line-height:1.45;
+    overflow:hidden;
+    -webkit-font-smoothing:antialiased;
+  }
+  .app{display:flex; flex-direction:column; height:100vh;}
+
+  /* ===== 顶部栏 ===== */
+  header.topbar{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:9px 16px; background:linear-gradient(180deg,#13233f,#0d1a30);
+    border-bottom:1px solid var(--border); flex:0 0 auto;
+  }
+  .brand{display:flex; align-items:center; gap:10px;}
+  .brand .logo{
+    width:26px; height:26px; border-radius:7px;
+    background:conic-gradient(from 210deg,var(--hot),var(--accent),var(--cold),var(--hot));
+    box-shadow:0 0 14px rgba(255,138,30,.55); position:relative;
+  }
+  .brand .logo::after{content:""; position:absolute; inset:5px; border-radius:5px; background:#0c1830;}
+  .brand h1{font-size:15px; font-weight:700; letter-spacing:.3px;}
+  .brand .sub{font-size:11px; color:var(--muted); font-weight:400;}
+  .modes{display:flex; gap:8px; align-items:center;}
+  .btn{
+    background:#16264a; color:var(--text); border:1px solid var(--border);
+    padding:7px 14px; border-radius:8px; font-size:12px; cursor:pointer;
+    transition:.15s; font-weight:600; letter-spacing:.2px;
+  }
+  .btn:hover{background:#1d3260; border-color:#34528a;}
+  .btn.active{background:linear-gradient(180deg,#ff942e,#f17200); color:#1a0f00; border-color:#ff942e;
+    box-shadow:0 0 14px rgba(255,138,30,.45);}
+  .btn.ghost{background:transparent;}
+  .seg{display:flex; background:#0b1628; border:1px solid var(--border); border-radius:9px; padding:3px; gap:3px;}
+  .seg .btn{border:none; border-radius:6px; padding:6px 12px;}
+  .seg .btn:hover{background:#16264a;}
+
+  /* ===== 主区 ===== */
+  .main{flex:1 1 auto; display:grid; grid-template-columns:300px 1fr 360px; min-height:0;}
+  .panel{background:var(--panel); border-right:1px solid var(--border); overflow-y:auto; padding:14px;}
+  .panel.right{border-right:none; border-left:1px solid var(--border);}
+  .panel::-webkit-scrollbar{width:9px;}
+  .panel::-webkit-scrollbar-thumb{background:#2a3f68; border-radius:5px;}
+  .panel::-webkit-scrollbar-track{background:transparent;}
+
+  .sec-title{
+    display:flex; align-items:center; gap:8px;
+    font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase;
+    color:var(--muted); margin:4px 2px 12px;
+  }
+  .sec-title .dot{width:6px;height:6px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent);}
+  .sec-title .en{color:var(--dim); font-weight:500; text-transform:none; letter-spacing:.2px;}
+
+  /* 参数模块 */
+  .param{margin-bottom:16px; padding:11px 12px; background:var(--panel2); border:1px solid var(--border2); border-radius:10px;}
+  .param .row{display:flex; align-items:baseline; justify-content:space-between; margin-bottom:7px;}
+  .param .name{font-size:12px; color:var(--text); font-weight:600;}
+  .param .name .en{color:var(--dim); font-weight:500; font-size:10.5px; margin-left:4px;}
+  .param .val{font-size:14px; font-weight:700; color:var(--accent); font-variant-numeric:tabular-nums;}
+  .param .val .u{font-size:10px; color:var(--muted); font-weight:500; margin-left:2px;}
+  .param .rng{display:flex; align-items:center; gap:8px;}
+  .param .rng .min,.param .rng .max{font-size:10px; color:var(--dim); width:34px;}
+  .param .rng .max{text-align:right;}
+
+  input[type=range]{
+    -webkit-appearance:none; appearance:none; flex:1; height:5px; border-radius:3px; outline:none;
+    background:linear-gradient(90deg,var(--cold),var(--accent),var(--hot));
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none; width:15px; height:15px; border-radius:50%;
+    background:#fff; border:2px solid var(--accent); cursor:pointer;
+    box-shadow:0 1px 5px rgba(0,0,0,.5);
+  }
+  input[type=range]::-moz-range-thumb{
+    width:14px;height:14px;border-radius:50%;background:#fff;border:2px solid var(--accent);cursor:pointer;
+  }
+  input[type=range]:disabled{opacity:.45;}
+  .param.disabled{opacity:.55;}
+
+  /* ===== 中央 3D 舞台 ===== */
+  .stage{position:relative; min-height:0; background:radial-gradient(circle at 50% 40%,#0e1f3a 0%,#070d1a 75%);}
+  #three{width:100%; height:100%; display:block;}
+  .stage-overlay{position:absolute; pointer-events:none;}
+  .stage-title{top:14px; left:18px; font-size:12px; color:var(--muted); letter-spacing:.5px;}
+  .stage-title b{color:var(--text); font-weight:700;}
+  .legend{
+    bottom:14px; left:18px; display:flex; gap:14px; flex-wrap:wrap;
+    background:rgba(8,16,30,.65); border:1px solid var(--border2); border-radius:10px; padding:8px 12px;
+    backdrop-filter:blur(6px); pointer-events:auto;
+  }
+  .legend .it{display:flex; align-items:center; gap:6px; font-size:11px; color:var(--muted);}
+  .legend .sw{width:10px;height:10px;border-radius:3px;}
+  .hint{
+    top:14px; right:18px; font-size:11px; color:var(--dim);
+    background:rgba(8,16,30,.5); border:1px solid var(--border2); border-radius:8px; padding:5px 9px;
+  }
+  .flowbadge{
+    bottom:14px; right:18px; display:flex; flex-direction:column; gap:4px; align-items:flex-end;
+    background:rgba(8,16,30,.65); border:1px solid var(--border2); border-radius:10px; padding:8px 12px;
+  }
+  .flowbadge .l{font-size:10px;color:var(--dim); letter-spacing:.5px;}
+  .flowbadge .v{font-size:16px; font-weight:800; color:var(--good); font-variant-numeric:tabular-nums;}
+
+  /* ===== 右侧 ===== */
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:8px;}
+  .metric{
+    background:var(--panel2); border:1px solid var(--border2); border-radius:10px; padding:10px 11px;
+    position:relative; overflow:hidden;
+  }
+  .metric.full{grid-column:1 / -1;}
+  .metric .ml{font-size:10.5px; color:var(--muted); display:flex; justify-content:space-between; align-items:center;}
+  .metric .ml .en{color:var(--dim); font-size:9.5px;}
+  .metric .mv{font-size:19px; font-weight:800; margin-top:3px; font-variant-numeric:tabular-nums;}
+  .metric .mu{font-size:10px; color:var(--dim); font-weight:500; margin-left:3px;}
+  .metric .formula{font-size:10px; color:var(--dim); margin-top:2px; font-style:italic;}
+  .metric.qin .mv{color:var(--accent);}
+  .metric.qout .mv{color:var(--cold);}
+  .metric.eff{border-color:#3a5c33;}
+  .metric.eff .mv{color:var(--good);}
+  .metric .bar{position:absolute; left:0; bottom:0; height:3px; background:linear-gradient(90deg,var(--good),var(--accent));}
+
+  .card{background:var(--panel2); border:1px solid var(--border2); border-radius:10px; padding:11px 12px; margin-top:12px;}
+  .card .ct{font-size:11px; font-weight:700; color:var(--muted); letter-spacing:.5px; margin-bottom:8px;
+    display:flex; justify-content:space-between; align-items:center;}
+  .card .ct .en{color:var(--dim); font-weight:500; font-size:10px;}
+
+  /* 状态点表 */
+  table.states{width:100%; border-collapse:collapse; font-size:11px; font-variant-numeric:tabular-nums;}
+  table.states th{color:var(--dim); font-weight:600; text-align:right; padding:4px 5px; border-bottom:1px solid var(--border2);}
+  table.states th:first-child{text-align:center;}
+  table.states td{text-align:right; padding:4px 5px; border-bottom:1px solid rgba(36,58,99,.35); color:var(--text);}
+  table.states td:first-child{text-align:center; font-weight:700;}
+  table.states td .pi{display:inline-block; width:16px;height:16px;border-radius:50%; font-size:10px; line-height:16px; color:#0b0b0b; font-weight:800;}
+  .p1{background:var(--cold);} .p2{background:#6fb6f0;} .p3{background:var(--hot);} .p4{background:#ff9d5c;}
+
+  canvas.chart{width:100%; height:230px; display:block; border-radius:7px; background:#0a1426;}
+
+  .note{font-size:10.5px; color:var(--dim); margin-top:8px; line-height:1.5;}
+  .err{color:var(--hot); font-size:11px; padding:6px 10px; background:rgba(255,107,53,.1); border:1px solid rgba(255,107,53,.4); border-radius:8px; margin-bottom:10px; display:none;}
+
+  .pill{font-size:10px; padding:2px 7px; border-radius:20px; background:#16264a; color:var(--muted); border:1px solid var(--border);}
+  .pill.good{background:rgba(54,211,153,.12); color:var(--good); border-color:rgba(54,211,153,.35);}
+  .pill.hot{background:rgba(255,107,53,.12); color:var(--hot); border-color:rgba(255,107,53,.35);}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- ===== 顶部栏 ===== -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo"></div>
+      <div>
+        <h1>朗肯循环 3D 仿真实验台 <span class="sub">/ Rankine Cycle 3D Simulator</span></h1>
+      </div>
+    </div>
+    <div class="modes">
+      <div class="seg">
+        <button class="btn active" id="modeIdeal">理想循环 Ideal</button>
+        <button class="btn" id="modeActual">实际循环 Actual</button>
+      </div>
+      <button class="btn ghost" id="btnReset">重置 Reset</button>
+      <button class="btn" id="btnRun">⏸ 暂停</button>
+    </div>
+  </header>
+
+  <!-- ===== 主区 ===== -->
+  <div class="main">
+    <!-- ===== 左：参数面板 ===== -->
+    <aside class="panel left">
+      <div class="sec-title"><span class="dot"></span>工况参数设置 <span class="en">Parameters</span></div>
+      <div id="errBox" class="err"></div>
+
+      <div class="param" data-p="Pboil">
+        <div class="row"><div class="name">锅炉出口压力 <span class="en">P boiler</span></div>
+          <div class="val"><span id="vPboil">8.0</span><span class="u">MPa</span></div></div>
+        <div class="rng"><span class="min">0.5</span>
+          <input type="range" id="Pboil" min="0.5" max="20" step="0.1" value="8">
+          <span class="max">20</span></div>
+      </div>
+
+      <div class="param" data-p="T3">
+        <div class="row"><div class="name">过热蒸汽温度 <span class="en">T₃</span></div>
+          <div class="val"><span id="vT3">480</span><span class="u">°C</span></div></div>
+        <div class="rng"><span class="min" id="T3minLbl">300</span>
+          <input type="range" id="T3" min="300" max="700" step="5" value="480">
+          <span class="max">700</span></div>
+      </div>
+
+      <div class="param" data-p="Pcond">
+        <div class="row"><div class="name">冷凝器压力 <span class="en">P cond</span></div>
+          <div class="val"><span id="vPcond">8</span><span class="u">kPa</span></div></div>
+        <div class="rng"><span class="min">5</span>
+          <input type="range" id="Pcond" min="5" max="100" step="1" value="8">
+          <span class="max">100</span></div>
+      </div>
+
+      <div class="param disabled" data-p="etaT">
+        <div class="row"><div class="name">汽轮机相对内效率 <span class="en">η_T</span></div>
+          <div class="val"><span id="vetaT">100</span><span class="u">%</span></div></div>
+        <div class="rng"><span class="min">60</span>
+          <input type="range" id="etaT" min="60" max="100" step="1" value="100" disabled>
+          <span class="max">100</span></div>
+      </div>
+
+      <div class="param disabled" data-p="etaP">
+        <div class="row"><div class="name">给水泵效率 <span class="en">η_P</span></div>
+          <div class="val"><span id="vetaP">100</span><span class="u">%</span></div></div>
+        <div class="rng"><span class="min">60</span>
+          <input type="range" id="etaP" min="60" max="100" step="1" value="100" disabled>
+          <span class="max">100</span></div>
+      </div>
+
+      <div class="param" data-p="mdot">
+        <div class="row"><div class="name">蒸汽质量流量 <span class="en">ṁ</span></div>
+          <div class="val"><span id="vmdot">50</span><span class="u">kg/s</span></div></div>
+        <div class="rng"><span class="min">1</span>
+          <input type="range" id="mdot" min="1" max="200" step="1" value="50">
+          <span class="max">200</span></div>
+      </div>
+
+      <div class="note">
+        ⓘ 物性基于内置 IAPWS 水和水蒸气饱和/过热蒸汽表插值，热效率与标准蒸汽表误差通常 &lt;2%。
+        拖动滑块可实时观察循环参数与 PV、TS 图变化。
+      </div>
+    </aside>
+
+    <!-- ===== 中央：3D ===== -->
+    <section class="stage">
+      <canvas id="three"></canvas>
+      <div class="stage-overlay stage-title"><b>朗肯循环装置</b> · 锅炉 → 汽轮机 → 冷凝器 → 给水泵</div>
+      <div class="stage-overlay hint">左键旋转 · 滚轮缩放 · 右键平移</div>
+      <div class="stage-overlay legend">
+        <div class="it"><span class="sw" style="background:var(--hot)"></span>过热蒸汽</div>
+        <div class="it"><span class="sw" style="background:#ff9d5c"></span>湿蒸汽</div>
+        <div class="it"><span class="sw" style="background:var(--cold)"></span>凝结水</div>
+        <div class="it"><span class="sw" style="background:var(--accent)"></span>炉膛火焰</div>
+      </div>
+      <div class="stage-overlay flowbadge">
+        <span class="l">输出电功率 POWER</span>
+        <span class="v"><span id="vPower">61.2</span> MW</span>
+      </div>
+    </section>
+
+    <!-- ===== 右：数据 + 图表 ===== -->
+    <aside class="panel right">
+      <div class="sec-title"><span class="dot"></span>循环性能指标 <span class="en">Performance</span></div>
+      <div class="grid2">
+        <div class="metric eff">
+          <div class="ml">循环热效率 <span class="en">η</span><span class="pill good" id="pillCarnot">/ Carnot 64%</span></div>
+          <div class="mv"><span id="mEff">43.0</span><span class="mu">%</span></div>
+          <div class="formula">η = w_net / q_in</div>
+          <div class="bar" id="effBar" style="width:43%"></div>
+        </div>
+        <div class="metric">
+          <div class="ml">净功 <span class="en">w_net</span></div>
+          <div class="mv"><span id="mWnet">1452</span><span class="mu">kJ/kg</span></div>
+          <div class="formula">w_t − w_p</div>
+        </div>
+        <div class="metric qin">
+          <div class="ml">循环吸热量 <span class="en">q_in</span></div>
+          <div class="mv"><span id="mQin">3375</span><span class="mu">kJ/kg</span></div>
+          <div class="formula">h₃ − h₂</div>
+        </div>
+        <div class="metric qout">
+          <div class="ml">循环放热量 <span class="en">q_out</span></div>
+          <div class="mv"><span id="mQout">1923</span><span class="mu">kJ/kg</span></div>
+          <div class="formula">h₄ − h₁</div>
+        </div>
+        <div class="metric">
+          <div class="ml">汽轮机功 <span class="en">w_t</span></div>
+          <div class="mv"><span id="mWt">1468</span><span class="mu">kJ/kg</span></div>
+        </div>
+        <div class="metric">
+          <div class="ml">给水泵耗功 <span class="en">w_p</span></div>
+          <div class="mv"><span id="mWp">15.1</span><span class="mu">kJ/kg</span></div>
+        </div>
+        <div class="metric full">
+          <div class="ml">背功比 <span class="en">bwr = w_p/w_t</span><span class="pill" id="pillBwr">1.03%</span></div>
+          <div class="mv"><span id="mBwr">1.03</span><span class="mu">%</span> &nbsp;·&nbsp;
+            汽耗率 <span id="mSR">2.48</span><span class="mu">kg/kWh</span> &nbsp;·&nbsp;
+            排汽干度 <span id="mX4">0.804</span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="ct">状态点参数 <span class="en">State Points</span></div>
+        <table class="states">
+          <thead><tr><th></th><th>T °C</th><th>P kPa</th><th>h kJ/kg</th><th>s kJ/kgK</th><th>x</th></tr></thead>
+          <tbody>
+            <tr><td><span class="pi p1">1</span></td><td id="s1T">—</td><td id="s1P">—</td><td id="s1h">—</td><td id="s1s">—</td><td id="s1x">—</td></tr>
+            <tr><td><span class="pi p2">2</span></td><td id="s2T">—</td><td id="s2P">—</td><td id="s2h">—</td><td id="s2s">—</td><td id="s2x">—</td></tr>
+            <tr><td><span class="pi p3">3</span></td><td id="s3T">—</td><td id="s3P">—</td><td id="s3h">—</td><td id="s3s">—</td><td id="s3x">—</td></tr>
+            <tr><td><span class="pi p4">4</span></td><td id="s4T">—</td><td id="s4P">—</td><td id="s4h">—</td><td id="s4s">—</td><td id="s4x">—</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card">
+        <div class="ct">T–s 图 <span class="en">Temperature–Entropy</span></div>
+        <canvas class="chart" id="tsCanvas"></canvas>
+      </div>
+
+      <div class="card">
+        <div class="ct">P–v 图 <span class="en">Pressure–Volume (log–log)</span></div>
+        <canvas class="chart" id="pvCanvas"></canvas>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<!-- ===== Three.js (r128 UMD, 支持 file:// 直接打开) ===== -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+"use strict";
+/* =========================================================================
+ * 1. 水和水蒸气物性（内置蒸汽表 + 插值）  单位: P=kPa, T=°C, h=kJ/kg, s=kJ/kgK, v=m³/kg
+ *    已用经典算例验证：3MPa/400℃/10kPa→η≈34%, 15MPa/600℃/10kPa→η≈43%
+ * ========================================================================= */
+const SAT = [
+  [0.01,0.611,0.0,2501.4,0.0000,9.1562,0.001000,206.14],
+  [10,1.228,42.0,2519.8,0.1510,8.8998,0.001000,106.32],
+  [20,2.339,83.9,2537.5,0.2963,8.6672,0.001002,57.79],
+  [30,4.246,125.8,2555.5,0.4369,8.4520,0.001004,32.93],
+  [40,7.384,167.5,2573.5,0.5724,8.2526,0.001008,19.52],
+  [45.82,10.0,191.81,2583.9,0.6492,8.1488,0.001010,14.670],
+  [50,12.35,209.3,2591.3,0.7038,8.0763,0.001012,12.03],
+  [60,19.94,251.1,2609.0,0.8311,7.9085,0.001017,7.671],
+  [70,31.19,293.0,2626.6,0.9549,7.7553,0.001023,5.046],
+  [80,47.39,334.9,2643.7,1.0753,7.6122,0.001029,3.407],
+  [90,70.14,377.0,2660.4,1.1925,7.4787,0.001036,2.361],
+  [99.61,101.325,417.46,2675.1,1.3026,7.3594,0.001043,1.6941],
+  [120,198.5,503.7,2706.0,1.5276,7.1271,0.001060,0.8919],
+  [140,361.4,589.1,2732.9,1.7390,6.9299,0.001080,0.5085],
+  [151.83,500.0,640.09,2748.0,1.8604,6.8206,0.001093,0.3749],
+  [160,618.0,675.5,2758.4,1.9427,6.7505,0.001102,0.3068],
+  [179.88,1000.0,762.51,2776.2,2.1382,6.5859,0.001127,0.1944],
+  [200,1554.9,852.4,2792.0,2.3309,6.4323,0.001157,0.1272],
+  [212.37,2000.0,908.47,2798.3,2.4473,6.3366,0.001177,0.09963],
+  [233.86,3000.0,1008.4,2803.8,2.6454,6.1858,0.001216,0.06599],
+  [263.94,5000.0,1154.2,2794.2,2.9202,5.9737,0.001286,0.03944],
+  [285.79,7000.0,1266.9,2763.5,3.1220,5.8133,0.001351,0.02737],
+  [311.00,10000.0,1407.5,2725.5,3.3596,5.6141,0.001452,0.01803],
+  [324.68,12000.0,1490.4,2688.7,3.4960,5.4395,0.001526,0.01426],
+  [342.16,15000.0,1610.5,2610.5,3.6848,5.3100,0.001658,0.01034],
+  [365.75,20000.0,1826.5,2400.0,4.0140,4.9700,0.002039,0.00586],
+  [373.95,22064.0,2084.3,2084.3,4.4120,4.4120,0.003170,0.00317],
+];
+const SUP = [
+  [500,200,2855.4,7.0592],[500,300,3064.6,7.4599],[500,400,3271.9,7.7938],[500,500,3483.9,8.0873],[500,600,3700.9,8.3521],[500,700,3922.0,8.5951],
+  [1000,200,2827.9,6.6940],[1000,300,3051.2,7.1228],[1000,400,3263.9,7.4651],[1000,500,3478.3,7.7621],[1000,600,3697.4,8.0290],[1000,700,3920.7,8.2735],
+  [2000,300,3024.2,6.7664],[2000,400,3247.6,7.1271],[2000,500,3467.6,7.4317],[2000,600,3690.1,7.7023],[2000,700,3916.9,7.9487],
+  [3000,300,2994.3,6.5390],[3000,400,3231.7,6.9211],[3000,500,3456.4,7.2354],[3000,600,3682.3,7.5081],[3000,700,3911.7,7.7567],
+  [5000,300,2925.6,6.2110],[5000,400,3195.6,6.6482],[5000,500,3433.7,6.9783],[5000,600,3666.5,7.2598],[5000,700,3900.1,7.5136],
+  [7000,400,3159.4,6.4514],[7000,500,3410.3,6.8000],[7000,600,3650.6,7.0910],[7000,700,3889.1,7.3502],
+  [10000,400,3097.5,6.2140],[10000,500,3375.1,6.5995],[10000,600,3625.3,6.9028],[10000,700,3870.5,7.1687],
+  [12000,400,3051.9,6.0825],[12000,500,3348.6,6.5255],[12000,600,3605.8,6.8355],[12000,700,3855.4,7.1071],
+  [15000,400,2945.5,5.8811],[15000,500,3310.8,6.3500],[15000,600,3582.3,6.6776],[15000,700,3836.4,6.9580],
+  [18000,500,3270.7,6.2193],[18000,600,3555.6,6.5600],[18000,700,3817.8,6.8500],
+  [20000,500,3240.9,6.1430],[20000,600,3537.0,6.5039],[20000,700,3806.4,6.8017],
+];
+const R_STEAM = 0.4615; // kJ/(kg·K) 水蒸气气体常数
+
+function bracketByCol(table,x,idx){
+  if(x<=table[0][idx])return [table[0],table[0]];
+  const n=table.length;
+  if(x>=table[n-1][idx])return [table[n-1],table[n-1]];
+  for(let i=0;i<n-1;i++) if(x>=table[i][idx]&&x<=table[i+1][idx]) return [table[i],table[i+1]];
+  return [table[n-1],table[n-1]];
+}
+function rowSat(r){return {T:r[0],P:r[1],hf:r[2],hg:r[3],sf:r[4],sg:r[5],vf:r[6],vg:r[7]};}
+function satByP(P){const [a,b]=bracketByCol(SAT,P,1); if(a===b)return Object.assign({P},rowSat(a));
+  const f=(P-a[1])/(b[1]-a[1]); return {T:a[0]+f*(b[0]-a[0]),P,hf:a[2]+f*(b[2]-a[2]),hg:a[3]+f*(b[3]-a[3]),
+    sf:a[4]+f*(b[4]-a[4]),sg:a[5]+f*(b[5]-a[5]),vf:a[6]+f*(b[6]-a[6]),vg:a[7]+f*(b[7]-a[7])};}
+function satByT(T){const [a,b]=bracketByCol(SAT,T,0); if(a===b)return rowSat(a);
+  const f=(T-a[0])/(b[0]-a[0]); return {T,P:a[1]+f*(b[1]-a[1]),hf:a[2]+f*(b[2]-a[2]),hg:a[3]+f*(b[3]-a[3]),
+    sf:a[4]+f*(b[4]-a[4]),sg:a[5]+f*(b[5]-a[5]),vf:a[6]+f*(b[6]-a[6]),vg:a[7]+f*(b[7]-a[7])};}
+function superheated(P,T){
+  const sat=satByP(P);
+  if(T<=sat.T) return {h:sat.hg,s:sat.sg,v:sat.vg,T:sat.T,region:'sat-vapor',Tsat:sat.T};
+  const Ps=[...new Set(SUP.map(r=>r[0]))].sort((a,b)=>a-b);
+  let pa=Ps[0],pb=Ps[0];
+  if(P>=Ps[Ps.length-1]){pa=Ps[Ps.length-1];pb=pa;}
+  else if(P>Ps[0]){for(let i=0;i<Ps.length-1;i++)if(P>=Ps[i]&&P<=Ps[i+1]){pa=Ps[i];pb=Ps[i+1];break;}}
+  const Ts=[...new Set(SUP.map(r=>r[1]))].sort((a,b)=>a-b);
+  let tLow=T,tHigh=T;
+  if(T<=Ts[0]){tLow=Ts[0];tHigh=Ts[1]||Ts[0];}
+  else if(T>=Ts[Ts.length-1]){tLow=Ts[Ts.length-2]||Ts[0];tHigh=Ts[Ts.length-1];}
+  else{for(let i=0;i<Ts.length-1;i++)if(T>=Ts[i]&&T<=Ts[i+1]){tLow=Ts[i];tHigh=Ts[i+1];break;}}
+  function lookup(p,t){const rows=SUP.filter(r=>r[0]===p); if(!rows.length){const any=SUP.filter(r=>r[1]===t);return{h:any[0][2],s:any[0][3]};}
+    const [a,b]=bracketByCol(rows,t,1); if(a===b)return{h:a[2],s:a[3]}; const f=(t-a[1])/(b[1]-a[1]); return{h:a[2]+f*(b[2]-a[2]),s:a[3]+f*(b[3]-a[3])};}
+  const A=lookup(pa,tLow),B=lookup(pa,tHigh),C=lookup(pb,tLow),D=lookup(pb,tHigh);
+  const ft=tHigh===tLow?0:(T-tLow)/(tHigh-tLow), fp=pb===pa?0:(P-pa)/(pb-pa);
+  const h=(1-ft)*((1-fp)*A.h+fp*C.h)+ft*((1-fp)*B.h+fp*D.h);
+  const s=(1-ft)*((1-fp)*A.s+fp*C.s)+ft*((1-fp)*B.s+fp*D.s);
+  return {h,s,v:R_STEAM*(T+273.15)/P,T,region:'superheated',Tsat:sat.T};
+}
+
+/* 朗肯循环求解 */
+function rankine({Pboil,T3,Pcond,etaT=1,etaP=1}){
+  const c=satByP(Pcond);
+  const h1=c.hf,s1=c.sf,v1=c.vf,T1=c.T;
+  const wp_is=v1*(Pboil-Pcond);                 // kJ/kg
+  const wp = etaP>=1 ? wp_is : wp_is/etaP;
+  const h2=h1+wp;
+  const s2 = etaP>=1 ? s1 : s1;                  // 泵熵增很小，近似
+  const st3=superheated(Pboil,T3);
+  const h3=st3.h,s3=st3.s,T3r=st3.T,v3=st3.v;
+  const s4s=s3, c4=satByP(Pcond);
+  let x4s,h4s; if(s4s>=c4.sg){x4s=1;h4s=c4.hg;} else if(s4s<=c4.sf){x4s=0;h4s=c4.hf;}
+    else{x4s=(s4s-c4.sf)/(c4.sg-c4.sf);h4s=c4.hf+x4s*(c4.hg-c4.hf);}
+  let h4,s4,x4;
+  if(etaT>=1){h4=h4s;s4=s4s;}
+  else{h4=h3-etaT*(h3-h4s); if(h4>=c4.hg){x4=1;s4=c4.sg;} else{x4=(h4-c4.hf)/(c4.hg-c4.hf);s4=c4.sf+x4*(c4.sg-c4.sf);}}
+  if(x4===undefined)x4=x4s;
+  if(s4===undefined)s4=s4s;
+  const v4=c4.vf+x4*(c4.vg-c4.vf);
+  const wt=h3-h4, qin=h3-h2, qout=h4-h1, wnet=wt-wp, eta=wnet/qin, bwr=wp/wt;
+  const etaCarnot=1-(T1+273.15)/(T3r+273.15);
+  const states={1:{P:Pcond,T:T1,h:h1,s:s1,x:0,v:v1},
+    2:{P:Pboil,T:T1+0.1,h:h2,s:s2,x:0,v:v1},
+    3:{P:Pboil,T:T3r,h:h3,s:s3,x:1,v:v3},
+    4:{P:Pcond,T:T1,h:h4,s:s4,x:x4,v:v4}};
+  return {states,sat:{boil:satByP(Pboil),cond:c4},
+    metrics:{wt,wp,wnet,qin,qout,eta,bwr,etaCarnot,sr:3600/wnet}};
+}
+
+/* =========================================================================
+ * 2. P-v / T-s 图表绘制（Canvas）
+ * ========================================================================= */
+function prepCanvas(cv){const dpr=window.devicePixelRatio||1;const W=cv.clientWidth,H=cv.clientHeight;
+  if(cv.width!==W*dpr||cv.height!==H*dpr){cv.width=W*dpr;cv.height=H*dpr;}
+  const ctx=cv.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,W,H);return {ctx,W,H};}
+function drawAxes(ctx,x0,y0,x1,y1,xT,yT,xlabel,ylabel){
+  ctx.strokeStyle='rgba(255,255,255,.55)';ctx.fillStyle='#93a6cc';ctx.lineWidth=1;
+  ctx.font='10px sans-serif';ctx.textAlign='center';ctx.textBaseline='top';
+  for(const[px,l] of xT){ctx.beginPath();ctx.moveTo(px,y1);ctx.lineTo(px,y1-4);ctx.stroke();ctx.fillText(l,px,y1+4);}
+  ctx.textAlign='right';ctx.textBaseline='middle';
+  for(const[py,l] of yT){ctx.beginPath();ctx.moveTo(x0,py);ctx.lineTo(x0+4,py);ctx.stroke();ctx.fillText(l,x0-6,py);}
+  ctx.save();ctx.translate((x0+x1)/2,y1+22);ctx.textAlign='center';ctx.textBaseline='bottom';
+  ctx.fillStyle='#cdd9ee';ctx.font='italic 11px sans-serif';ctx.fillText(xlabel,0,0);ctx.restore();
+  ctx.save();ctx.translate(x0-30,(y0+y1)/2);ctx.rotate(-Math.PI/2);ctx.textAlign='center';ctx.textBaseline='top';
+  ctx.fillStyle='#cdd9ee';ctx.font='italic 11px sans-serif';ctx.fillText(ylabel,0,0);ctx.restore();
+}
+
+function drawTs(cv,R){
+  const {ctx,W,H}=prepCanvas(cv);
+  const pad={l:40,r:14,t:12,b:34};
+  const sMin=0,sMax=9.0;
+  const T3=R.states[3].T;
+  const TMax=Math.max(T3,380)+50;
+  const X=s=>pad.l+(s-sMin)/(sMax-sMin)*(W-pad.l-pad.r);
+  const Y=t=>H-pad.b-(t)/(TMax)*(H-pad.t-pad.b);
+  // 网格
+  ctx.strokeStyle='rgba(255,255,255,.05)';ctx.lineWidth=1;
+  for(let s=1;s<9;s++){ctx.beginPath();ctx.moveTo(X(s),pad.t);ctx.lineTo(X(s),H-pad.b);ctx.stroke();}
+  for(let t=0;t<=TMax;t+=100){ctx.beginPath();ctx.moveTo(pad.l,Y(t));ctx.lineTo(W-pad.r,Y(t));ctx.stroke();}
+  const xT=[],yT=[];
+  for(let s=0;s<=8;s+=2)xT.push([X(s),String(s)]);
+  for(let t=0;t<=Math.floor(TMax/100)*100;t+=200)yT.push([Y(t),String(t)]);
+  drawAxes(ctx,pad.l,pad.t,W-pad.r,H-pad.b,xT,yT,'s  [kJ/(kg·K)]','T  [°C]');
+  // 饱和钟形线
+  ctx.beginPath();
+  for(let i=0;i<SAT.length;i++){const x=X(SAT[i][4]),y=Y(SAT[i][0]); if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);}
+  for(let i=SAT.length-1;i>=0;i--){ctx.lineTo(X(SAT[i][5]),Y(SAT[i][0]));}
+  ctx.closePath();
+  ctx.fillStyle='rgba(80,130,210,.12)';ctx.fill();
+  ctx.strokeStyle='rgba(160,180,215,.65)';ctx.lineWidth=1.2;ctx.stroke();
+  ctx.fillStyle='rgba(160,180,215,.6)';ctx.font='9px sans-serif';ctx.textAlign='left';
+  ctx.fillText('饱和线',X(SAT[SAT.length-3][5])+4,Y(370));
+  // 构造 2→3 路径（吸热）
+  const sb=R.sat.boil,sc=R.sat.cond,s1=R.states[1].s,T1=R.states[1].T,s3v=R.states[3].s;
+  const path23=[[s1,T1]];
+  for(let t=T1;t<=sb.T;t+=12){const st=satByT(t);path23.push([st.sf,t]);}
+  path23.push([sb.sf,sb.T],[sb.sg,sb.T]);
+  for(let t=sb.T+20;t<=T3;t+=20){const sp=superheated(R.states[3].P,t);path23.push([sp.s,t]);}
+  path23.push([s3v,T3]);
+  // qin 阴影
+  ctx.fillStyle='rgba(255,138,30,.18)';ctx.beginPath();
+  ctx.moveTo(X(path23[0][0]),Y(0));
+  for(const p of path23)ctx.lineTo(X(p[0]),Y(p[1]));
+  ctx.lineTo(X(s3v),Y(0));ctx.closePath();ctx.fill();
+  // qout 阴影（4→1 水平线下）
+  ctx.fillStyle='rgba(63,167,246,.18)';ctx.beginPath();
+  ctx.moveTo(X(s3v),Y(T1));ctx.lineTo(X(s1),Y(T1));
+  ctx.lineTo(X(s1),Y(0));ctx.lineTo(X(s3v),Y(0));ctx.closePath();ctx.fill();
+  // 循环线 1-2-3-4
+  ctx.strokeStyle='#FF8A1E';ctx.lineWidth=2.2;ctx.lineJoin='round';
+  ctx.beginPath();
+  ctx.moveTo(X(s1),Y(T1));                 // 1
+  ctx.lineTo(X(R.states[2].s),Y(T1+0.3)); // 1→2 泵（近似竖直）
+  for(const p of path23)ctx.lineTo(X(p[0]),Y(p[1]));   // 2→3
+  ctx.lineTo(X(s3v),Y(T1));                // 3→4 等熵膨胀
+  ctx.lineTo(X(s1),Y(T1));                 // 4→1 冷凝
+  ctx.stroke();
+  // 标注 qin / qout
+  ctx.font='bold 11px sans-serif';ctx.textAlign='center';
+  ctx.fillStyle='rgba(255,160,60,.95)';
+  ctx.fillText('q_in',X((s1+s3v)/2),Y(T3)-4);
+  ctx.fillStyle='rgba(80,180,250,.95)';
+  ctx.fillText('q_out',X((s3v+s1)/2),Y(T1)+12);
+  // 状态点
+  const pts=[[1,s1,T1],[2,R.states[2].s,T1+0.3],[3,s3v,T3],[4,s3v,T1]];
+  const colors={1:'#3FA7F6',2:'#6fb6f0',3:'#FF6B35',4:'#ff9d5c'};
+  for(const[i,s,t] of pts){
+    ctx.fillStyle=colors[i];ctx.strokeStyle='#0b0f18';ctx.lineWidth=2;
+    ctx.beginPath();ctx.arc(X(s),Y(t),4.5,0,Math.PI*2);ctx.fill();ctx.stroke();
+    ctx.fillStyle='#fff';ctx.font='bold 11px sans-serif';ctx.textAlign='center';
+    ctx.fillText(String(i),X(s),Y(t)-9);
+  }
+}
+
+function drawPv(cv,R){
+  const {ctx,W,H}=prepCanvas(cv);
+  const pad={l:46,r:14,t:12,b:34};
+  const lv=v=>Math.log10(v), lp=p=>Math.log10(p);
+  const vMin=0.0008,vMax=50,pMin=4,pMax=25000;
+  const X=v=>pad.l+(lv(v)-lv(vMin))/(lv(vMax)-lv(vMin))*(W-pad.l-pad.r);
+  const Y=p=>H-pad.b-(lp(p)-lp(pMin))/(lp(pMax)-lp(pMin))*(H-pad.t-pad.b);
+  // 网格(十进制)
+  ctx.strokeStyle='rgba(255,255,255,.05)';ctx.lineWidth=1;
+  for(const v of [0.001,0.01,0.1,1,10]){ctx.beginPath();ctx.moveTo(X(v),pad.t);ctx.lineTo(X(v),H-pad.b);ctx.stroke();}
+  for(const p of [10,100,1000,10000]){ctx.beginPath();ctx.moveTo(pad.l,Y(p));ctx.lineTo(W-pad.r,Y(p));ctx.stroke();}
+  const xT=[[X(0.001),'1e-3'],[X(0.01),'0.01'],[X(0.1),'0.1'],[X(1),'1'],[X(10),'10']];
+  const yT=[[Y(10),'10'],[Y(100),'100'],[Y(1000),'1k'],[Y(10000),'10k']];
+  drawAxes(ctx,pad.l,pad.t,W-pad.r,H-pad.b,xT,yT,'v  [m³/kg]','P  [kPa]');
+  // 饱和钟形（vf 左 / vg 右）
+  ctx.beginPath();
+  for(let i=0;i<SAT.length;i++){const x=X(SAT[i][6]),y=Y(SAT[i][1]); if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);}
+  for(let i=SAT.length-1;i>=0;i--){ctx.lineTo(X(SAT[i][7]),Y(SAT[i][1]));}
+  ctx.closePath();
+  ctx.fillStyle='rgba(80,130,210,.12)';ctx.fill();
+  ctx.strokeStyle='rgba(160,180,215,.65)';ctx.lineWidth=1.2;ctx.stroke();
+  // 循环过程线
+  const s1=R.states[1],s2=R.states[2],s3=R.states[3],s4=R.states[4];
+  const sb=R.sat.boil;
+  ctx.strokeStyle='#FF8A1E';ctx.lineWidth=2.2;ctx.lineJoin='round';
+  ctx.beginPath();
+  ctx.moveTo(X(s1.v),Y(s1.P));                 // 1
+  ctx.lineTo(X(s2.v),Y(s2.P));                 // 1→2 泵（近似等容升压）
+  ctx.lineTo(X(sb.vf),Y(sb.P));                // 进入锅炉饱和水
+  ctx.lineTo(X(sb.vg),Y(sb.P));                // 2→3 等压加热（穿过钟形）
+  ctx.lineTo(X(s3.v),Y(s3.P));                 // 过热
+  ctx.lineTo(X(s4.v),Y(s4.P));                 // 3→4 膨胀
+  ctx.lineTo(X(s1.v),Y(s1.P));                 // 4→1 冷凝
+  ctx.stroke();
+  // 等压线标注
+  ctx.fillStyle='rgba(255,160,60,.8)';ctx.font='9px sans-serif';ctx.textAlign='left';
+  ctx.fillText('P_锅炉',X(s3.v)+4,Y(s3.P)-6);
+  ctx.fillStyle='rgba(80,180,250,.8)';
+  ctx.fillText('P_冷凝',X(s4.v)+4,Y(s4.P)+12);
+  // 状态点
+  const pts=[['1',s1.v,s1.P,'#3FA7F6'],['2',s2.v,s2.P,'#6fb6f0'],['3',s3.v,s3.P,'#FF6B35'],['4',s4.v,s4.P,'#ff9d5c']];
+  for(const[i,v,p,c] of pts){
+    ctx.fillStyle=c;ctx.strokeStyle='#0b0f18';ctx.lineWidth=2;
+    ctx.beginPath();ctx.arc(X(v),Y(p),4.5,0,Math.PI*2);ctx.fill();ctx.stroke();
+    ctx.fillStyle='#fff';ctx.font='bold 11px sans-serif';ctx.textAlign='center';
+    ctx.fillText(i,X(v),Y(p)-9);
+  }
+}
+
+/* =========================================================================
+ * 3. Three.js 三维装置场景 + 工质流动
+ * ========================================================================= */
+let renderer,scene,camera,controls,clock;
+let turbineRotor,pumpImpeller,flameMat,condLight,boilerLight;
+let particleSys,curve;
+let particleU,particleColors,particleCount=140;
+let simState={turbineSpeed:6, pumpSpeed:4, particleSpeed:0.04, flame:1.0, mdot:50};
+let running=true;
+
+function initThree(){
+  const canvas=document.getElementById('three');
+  renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:false});
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+  renderer.setClearColor(0x070d1a,1);
+  scene=new THREE.Scene();
+  scene.fog=new THREE.Fog(0x070d1a,18,46);
+  camera=new THREE.PerspectiveCamera(45,1,0.1,200);
+  camera.position.set(11,7,13);
+  controls=new THREE.OrbitControls(camera,canvas);
+  controls.enableDamping=true;controls.dampingFactor=0.08;
+  controls.target.set(-0.8,0.8,0);controls.minDistance=6;controls.maxDistance=32;
+  clock=new THREE.Clock();
+
+  // 光照
+  scene.add(new THREE.AmbientLight(0x4a5a82,0.55));
+  const key=new THREE.DirectionalLight(0xffffff,0.85); key.position.set(8,14,8); scene.add(key);
+  const fill=new THREE.DirectionalLight(0x5577cc,0.4); fill.position.set(-10,4,-6); scene.add(fill);
+  boilerLight=new THREE.PointLight(0xff7a2f,1.6,14); boilerLight.position.set(-4.2,1.6,0.6); scene.add(boilerLight);
+  condLight=new THREE.PointLight(0x3fa7f6,0.9,12); condLight.position.set(-0.4,0.4,0.9); scene.add(condLight);
+
+  // 星空背景
+  const starGeo=new THREE.BufferGeometry();
+  const sp=[];for(let i=0;i<900;i++){const r=60+Math.random()*30;const th=Math.random()*Math.PI*2,ph=Math.acos(2*Math.random()-1);
+    sp.push(r*Math.sin(ph)*Math.cos(th),r*Math.cos(ph),r*Math.sin(ph)*Math.sin(th));}
+  starGeo.setAttribute('position',new THREE.Float32BufferAttribute(sp,3));
+  scene.add(new THREE.Points(starGeo,new THREE.PointsMaterial({color:0x9fb4d8,size:0.18,transparent:true,opacity:.7})));
+
+  // 地面圆盘（平台）
+  const plat=new THREE.Mesh(new THREE.CylinderGeometry(9,9.4,0.3,64),
+    new THREE.MeshStandardMaterial({color:0x0e1a30,metalness:.4,roughness:.7}));
+  plat.position.y=-2.6; scene.add(plat);
+  // 平台发光圆环
+  const ring=new THREE.Mesh(new THREE.RingGeometry(8.9,9.05,64),
+    new THREE.MeshBasicMaterial({color:0x2a4060,transparent:true,opacity:.55,side:THREE.DoubleSide}));
+  ring.rotation.x=-Math.PI/2; ring.position.y=-2.43; scene.add(ring);
+  buildDevice();
+  buildPipeAndParticles();
+  resize();
+  window.addEventListener('resize',resize);
+  animate();
+}
+// 修正上面 ring 的颜色（避免语法占位）
+// （已用合法值覆盖）
+
+function metalMat(color,metal=0.6,rough=0.45,emi=0,emiC=0x000000){
+  return new THREE.MeshStandardMaterial({color,metalness:metal,roughness:rough,emissive:emiC,emissiveIntensity:emi});
+}
+
+function buildDevice(){
+  // —— 锅炉（炉膛 + 汽包）位于 x≈-4.2 ——
+  const boiler=new THREE.Group(); boiler.position.set(-4.2,0,0);
+  // 炉膛
+  const furnace=new THREE.Mesh(new THREE.BoxGeometry(2.0,3.0,1.6),
+    metalMat(0x2a3550,0.5,0.6));
+  furnace.position.y=0.3; boiler.add(furnace);
+  // 炉膛开口（发光）
+  flameMat=new THREE.MeshBasicMaterial({color:0xff7a2f,transparent:true,opacity:0.9});
+  const flame=new THREE.Mesh(new THREE.PlaneGeometry(1.5,2.2),flameMat);
+  flame.position.set(0,0.3,0.81); boiler.add(flame);
+  const flame2=flame.clone(); flame2.position.z=-0.81; flame2.rotation.y=Math.PI; boiler.add(flame2);
+  window.__flames=[flame,flame2];
+  // 汽包（顶部圆柱）
+  const drum=new THREE.Mesh(new THREE.CylinderGeometry(0.7,0.7,2.0,24),
+    metalMat(0x3a4a6a,0.6,0.4)); drum.rotation.z=Math.PI/2; drum.position.y=2.2; boiler.add(drum);
+  const drumCap=new THREE.Mesh(new THREE.SphereGeometry(0.7,20,12,0,Math.PI*2,0,Math.PI/2),
+    metalMat(0x4a5a7a));drumCap.position.set(1.0,2.2,0);drumCap.rotation.z=-Math.PI/2;boiler.add(drumCap);
+  // 炉膛烟囱
+  const stack=new THREE.Mesh(new THREE.CylinderGeometry(0.18,0.22,1.6,16),
+    metalMat(0x3a4a6a)); stack.position.set(-0.6,2.5,0); boiler.add(stack);
+  // 标签
+  boiler.add(makeLabel('锅炉 BOILER',-0.2,-1.0,0x000000));
+  scene.add(boiler);
+
+  // —— 汽轮机 + 发电机（水平，y≈3.0）——
+  const turb=new THREE.Group(); turb.position.set(-0.4,3.0,0);
+  // 缸体
+  const casing=new THREE.Mesh(new THREE.CylinderGeometry(0.62,0.62,3.0,28),
+    metalMat(0x46566f,0.7,0.35)); casing.rotation.z=Math.PI/2; turb.add(casing);
+  // 进汽端/排汽端锥
+  const cone1=new THREE.Mesh(new THREE.CylinderGeometry(0.62,0.4,0.6,24),metalMat(0x394a64));
+  cone1.rotation.z=Math.PI/2; cone1.position.x=-1.8; turb.add(cone1);
+  const cone2=new THREE.Mesh(new THREE.CylinderGeometry(0.4,0.55,0.6,24),metalMat(0x394a64));
+  cone2.rotation.z=Math.PI/2; cone2.position.x=1.8; turb.add(cone2);
+  // 转子（旋转叶片组）
+  turbineRotor=new THREE.Group();
+  for(let i=0;i<4;i++){
+    const disc=new THREE.Mesh(new THREE.CylinderGeometry(0.45,0.45,0.08,22),
+      metalMat(0x6a7a98,0.8,0.3)); disc.rotation.z=Math.PI/2; disc.position.x=-0.9+i*0.6; turbineRotor.add(disc);
+    for(let b=0;b<10;b++){const blade=new THREE.Mesh(new THREE.BoxGeometry(0.04,0.5,0.12),
+      metalMat(0x9fb0cc,0.7,0.3));const a=b/10*Math.PI*2;
+      blade.position.set(-0.9+i*0.6,Math.cos(a)*0.42,Math.sin(a)*0.42);blade.rotation.x=a;turbineRotor.add(blade);}
+  }
+  turb.add(turbineRotor);
+  turb.add(makeLabel('汽轮机 TURBINE',0,-1.0,0x000000));
+  scene.add(turb);
+
+  // 发电机
+  const gen=new THREE.Group(); gen.position.set(3.0,3.0,0);
+  const genBody=new THREE.Mesh(new THREE.CylinderGeometry(0.55,0.55,1.4,24),
+    metalMat(0x394a64,0.6,0.4)); genBody.rotation.z=Math.PI/2; gen.add(genBody);
+  const shaft=new THREE.Mesh(new THREE.CylinderGeometry(0.08,0.08,0.5,12),metalMat(0x9fb0cc,0.9,0.2));
+  shaft.rotation.z=Math.PI/2; shaft.position.x=-0.95; gen.add(shaft);
+  gen.add(makeLabel('发电机 GEN',0,-1.0,0x000000));
+  scene.add(gen);
+
+  // —— 冷凝器（水平壳管式，底部）——
+  const cond=new THREE.Group(); cond.position.set(-0.2,-0.6,0);
+  const shell=new THREE.Mesh(new THREE.CylinderGeometry(0.85,0.85,3.6,28),
+    metalMat(0x2f4a6a,0.5,0.5)); shell.rotation.z=Math.PI/2; cond.add(shell);
+  // 管束
+  for(let i=-2;i<=2;i++)for(let j=-1;j<=1;j++){
+    const tube=new THREE.Mesh(new THREE.CylinderGeometry(0.07,0.07,3.4,10),
+      metalMat(0x6fb6f0,0.6,0.4,0.0,0x1a3a5a)); tube.rotation.z=Math.PI/2;
+    tube.position.set(0,j*0.35,i*0.0); // 沿长度方向排满
+    tube.position.y=j*0.4; tube.position.z=i*0.28; cond.add(tube);
+  }
+  const condEnd=new THREE.Mesh(new THREE.CylinderGeometry(0.85,0.85,0.2,28),metalMat(0x244060));
+  condEnd.rotation.z=Math.PI/2; condEnd.position.x=1.9; cond.add(condEnd);
+  cond.add(makeLabel('冷凝器 CONDENSER',0,-1.3,0x000000));
+  scene.add(cond);
+
+  // —— 给水泵（小立式）——
+  const pump=new THREE.Group(); pump.position.set(-3.6,-1.7,0);
+  const pHousing=new THREE.Mesh(new THREE.CylinderGeometry(0.45,0.45,0.9,20),
+    metalMat(0x46566f,0.6,0.4)); pHousing.position.y=0.2; pump.add(pHousing);
+  pumpImpeller=new THREE.Group();
+  for(let b=0;b<6;b++){const blade=new THREE.Mesh(new THREE.BoxGeometry(0.06,0.32,0.12),
+    metalMat(0x9fb0cc,0.7,0.3));const a=b/6*Math.PI*2;blade.position.set(Math.cos(a)*0.22,0,Math.sin(a)*0.22);blade.rotation.y=a;pumpImpeller.add(blade);}
+  pumpImpeller.position.y=0.25; pump.add(pumpImpeller);
+  const motor=new THREE.Mesh(new THREE.CylinderGeometry(0.35,0.35,0.5,18),metalMat(0x5a3a2a,0.3,0.7));
+  motor.position.y=0.9; pump.add(motor);
+  pump.add(makeLabel('给水泵 PUMP',0,-0.6,0x000000));
+  scene.add(pump);
+}
+
+/* 文字标签（Canvas 纹理精灵） */
+function makeLabel(text,yoff,color){
+  const c=document.createElement('canvas');c.width=256;c.height=64;
+  const x=c.getContext('2d');
+  x.fillStyle='rgba(10,20,38,.78)';x.fillRect(0,0,256,64);
+  x.strokeStyle='rgba(120,150,200,.6)';x.lineWidth=2;x.strokeRect(2,2,252,60);
+  x.fillStyle='#cdd9ee';x.font='bold 26px sans-serif';x.textAlign='center';x.textBaseline='middle';
+  x.fillText(text,128,34);
+  const tex=new THREE.CanvasTexture(c);
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true}));
+  sp.scale.set(2.4,0.6,1); sp.position.y=yoff; return sp;
+}
+
+/* 管道（沿循环路径）+ 工质粒子 */
+function buildPipeAndParticles(){
+  // 循环路径关键点（位置 + 颜色 0冷..1热），3→4→1→2→3 闭环
+  const wp=[
+    // 3 锅炉汽包出口 → 汽轮机（过热蒸汽，热）
+    {p:[-3.5,2.3,0.6],c:1.0},{p:[-2.4,2.7,0.6],c:1.0},{p:[-2.2,3.0,0.6],c:1.0},
+    // 穿过汽轮机
+    {p:[-0.4,3.0,0.6],c:0.95},{p:[1.6,3.0,0.6],c:0.85},
+    // 4 汽轮机出口 → 下降 → 冷凝器（湿蒸汽，渐冷）
+    {p:[2.4,2.4,0.6],c:0.75},{p:[2.0,1.0,0.6],c:0.6},{p:[1.4,0.0,0.6],c:0.5},
+    // 穿过冷凝器（凝结，冷）
+    {p:[-0.2,-0.6,0.6],c:0.3},{p:[-1.8,-0.6,0.6],c:0.15},
+    // 1 冷凝器出口 → 给水泵（凝结水，冷）
+    {p:[-2.6,-0.6,0.6],c:0.08},{p:[-3.6,-1.2,0.6],c:0.05},
+    // 2 泵出口 → 锅炉底部（压力水，冷）
+    {p:[-3.6,-0.6,0.6],c:0.05},{p:[-4.2,0.0,0.6],c:0.1},
+    // 进入锅炉，上升加热（蓝→橙）
+    {p:[-4.2,0.9,0.5],c:0.35},{p:[-4.2,1.8,0.4],c:0.7},{p:[-4.2,2.3,0.5],c:1.0},
+  ];
+  const pts=wp.map(o=>new THREE.Vector3(o.p[0],o.p[1],o.p[2]));
+  curve=new THREE.CatmullRomCurve3(pts,true,'catmullrom',0.35);
+  // 管道
+  const tubeGeo=new THREE.TubeGeometry(curve,260,0.12,10,true);
+  const tubeMat=new THREE.MeshStandardMaterial({color:0x3a4a6a,metalness:0.6,roughness:0.45});
+  scene.add(new THREE.Mesh(tubeGeo,tubeMat));
+  // 管道内壁发光线（提示流向）
+  const tubeInner=new THREE.Mesh(new THREE.TubeGeometry(curve,260,0.06,8,true),
+    new THREE.MeshBasicMaterial({color:0x2a3a5a,transparent:true,opacity:0.5}));
+  scene.add(tubeInner);
+
+  // 颜色查表（按 u）
+  const N=wp.length;
+  function colorAt(u){const f=u*N;const i=Math.floor(f)%N;const k=f-Math.floor(f);
+    const t=wp[i].c*(1-k)+wp[(i+1)%N].c*k; return t;}
+  particleColors=[];
+  // 工质粒子（小球）
+  const geo=new THREE.SphereGeometry(0.13,10,10);
+  particleSys=new THREE.InstancedMesh(geo,new THREE.MeshBasicMaterial({vertexColors:false}),particleCount);
+  // 用 InstancedMesh + 颜色
+  const dummy=new THREE.Object3D();
+  particleU=new Float32Array(particleCount);
+  for(let i=0;i<particleCount;i++){
+    particleU[i]=i/particleCount;
+    dummy.position.copy(curve.getPointAt(particleU[i]));
+    const s=0.8+Math.random()*0.6; dummy.scale.setScalar(s);
+    dummy.updateMatrix(); particleSys.setMatrixAt(i,dummy.matrix);
+    const t=colorAt(particleU[i]); particleSys.setColorAt(i,colLerp(t));
+  }
+  particleSys.instanceMatrix.needsUpdate=true;
+  if(particleSys.instanceColor)particleSys.instanceColor.needsUpdate=true;
+  scene.add(particleSys);
+  window.__colorAt=colorAt;
+}
+function colLerp(t){
+  // t: 0 冷蓝 → 0.5 橙 → 1 红热
+  const cold=new THREE.Color(0x3fa7f6), mid=new THREE.Color(0xff9d5c), hot=new THREE.Color(0xff4b1f);
+  const c=new THREE.Color();
+  if(t<0.5)c.lerpColors(cold,mid,t/0.5); else c.lerpColors(mid,hot,(t-0.5)/0.5);
+  return c;
+}
+
+function resize(){
+  const canvas=document.getElementById('three');
+  const w=canvas.clientWidth,h=canvas.clientHeight;
+  if(w===0||h===0)return;
+  renderer.setSize(w,h,false);
+  camera.aspect=w/h; camera.updateProjectionMatrix();
+}
+
+function animate(){
+  requestAnimationFrame(animate);
+  const dt=Math.min(clock.getDelta(),0.05);
+  if(running){
+    // 粒子流动
+    const sp=simState.particleSpeed*(0.6+simState.mdot/120);
+    const dummy=new THREE.Object3D();
+    for(let i=0;i<particleCount;i++){
+      particleU[i]=(particleU[i]+sp*dt)%1;
+      dummy.position.copy(curve.getPointAt(particleU[i]));
+      dummy.updateMatrix(); particleSys.setMatrixAt(i,dummy.matrix);
+    }
+    particleSys.instanceMatrix.needsUpdate=true;
+    // 旋转
+    turbineRotor.rotation.x+=simState.turbineSpeed*dt;
+    pumpImpeller.rotation.y+=simState.pumpSpeed*dt;
+    // 火焰闪烁
+    const fl=0.7+0.3*Math.sin(performance.now()*0.012)+0.1*Math.sin(performance.now()*0.03);
+    const fi=simState.flame*fl;
+    if(window.__flames)window.__flames.forEach(f=>f.material.opacity=THREE.MathUtils.clamp(fi,0.2,1));
+    boilerLight.intensity=1.2+0.8*fi;
+    condLight.intensity=0.5+0.6*(simState.mdot/200);
+  }
+  controls.update();
+  renderer.render(scene,camera);
+}
+
+/* =========================================================================
+ * 4. 应用控制器
+ * ========================================================================= */
+const $=id=>document.getElementById(id);
+const params={Pboil:8,T3:480,Pcond:8,etaT:100,etaP:100,mdot:50};
+let mode='ideal';
+
+function readParams(){
+  params.Pboil=parseFloat($('Pboil').value);
+  params.T3=parseFloat($('T3').value);
+  params.Pcond=parseFloat($('Pcond').value);
+  params.etaT=parseFloat($('etaT').value);
+  params.etaP=parseFloat($('etaP').value);
+  params.mdot=parseFloat($('mdot').value);
+}
+function fmt(v,d=1){ if(v===null||v===undefined||isNaN(v))return '—'; const f=Math.pow(10,d);
+  return (Math.round(v*f)/f).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d}); }
+
+function applyT3Range(){
+  const Tsat=satByP(params.Pboil*1000).T;
+  const minT=Math.max(200,Math.ceil(Tsat+10));
+  $('T3').min=minT; $('T3minLbl').textContent=minT;
+  if(params.T3<minT){params.T3=minT;$('T3').value=minT;$('vT3').textContent=minT;}
+}
+
+function recompute(){
+  readParams();
+  applyT3Range();
+  const R=rankine({Pboil:params.Pboil*1000,T3:params.T3,Pcond:params.Pcond,etaT:params.etaT/100,etaP:params.etaP/100});
+  // 左侧数值
+  $('vPboil').textContent=fmt(params.Pboil,1);
+  $('vT3').textContent=Math.round(params.T3);
+  $('vPcond').textContent=Math.round(params.Pcond);
+  $('vetaT').textContent=Math.round(params.etaT);
+  $('vetaP').textContent=Math.round(params.etaP);
+  $('vmdot').textContent=Math.round(params.mdot);
+  // 性能指标
+  const m=R.metrics;
+  $('mEff').textContent=fmt(m.eta*100,2);
+  $('mWnet').textContent=fmt(m.wnet,0);
+  $('mQin').textContent=fmt(m.qin,0);
+  $('mQout').textContent=fmt(m.qout,0);
+  $('mWt').textContent=fmt(m.wt,0);
+  $('mWp').textContent=fmt(m.wp,2);
+  $('mBwr').textContent=fmt(m.bwr*100,2);
+  $('mSR').textContent=fmt(m.sr,2);
+  $('mX4').textContent=fmt(R.states[4].x,3);
+  $('effBar').style.width=fmt(m.eta*100,1)+'%';
+  $('pillCarnot').textContent='/ Carnot '+fmt(m.etaCarnot*100,0)+'%';
+  $('pillBwr').textContent=fmt(m.bwr*100,2)+'%';
+  $('vPower').textContent=fmt(m.wnet*params.mdot/1000,1); // MW
+  // 状态点表
+  for(const i of [1,2,3,4]){const s=R.states[i];
+    $(`s${i}T`).textContent=fmt(s.T,1); $(`s${i}P`).textContent=fmt(s.P,0);
+    $(`s${i}h`).textContent=fmt(s.h,1); $(`s${i}s`).textContent=fmt(s.s,3);
+    $(`s${i}x`).textContent= i===2?'—':(s.x<0||s.x>1?fmt(s.x,2):fmt(s.x,3));}
+  // 图表
+  drawTs($('tsCanvas'),R);
+  drawPv($('pvCanvas'),R);
+  // 3D 联动
+  simState.turbineSpeed=2+ (m.wnet/1000)*6;       // 净功越大转得越快
+  simState.pumpSpeed=3+(m.wp/30)*6;
+  simState.particleSpeed=0.03+params.mdot/200*0.10;
+  simState.flame=Math.min(1.6,0.5+m.qin/3000);
+  simState.mdot=params.mdot;
+  // 排汽干度告警
+  const err=$('errBox');
+  if(R.states[4].x<0.88){err.style.display='block';
+    err.textContent='⚠ 排汽干度 x₄='+fmt(R.states[4].x,3)+' 偏低（<0.88），汽轮机末级叶片可能受液滴侵蚀。建议提高过热温度或降低冷凝器压力。';
+  }else err.style.display='none';
+  return R;
+}
+
+function bindSliders(){
+  for(const id of ['Pboil','T3','Pcond','etaT','etaP','mdot']){
+    $(id).addEventListener('input',()=>recompute());
+  }
+}
+function setMode(m){
+  mode=m;
+  $('modeIdeal').classList.toggle('active',m==='ideal');
+  $('modeActual').classList.toggle('active',m==='actual');
+  const etaEls=['etaT','etaP'];
+  if(m==='ideal'){$('etaT').value=100;$('etaP').value=100;$('etaT').disabled=true;$('etaP').disabled=true;
+    document.querySelectorAll('.param[data-p="etaT"],.param[data-p="etaP"]').forEach(e=>e.classList.add('disabled'));}
+  else{$('etaT').disabled=false;$('etaP').disabled=false;
+    document.querySelectorAll('.param[data-p="etaT"],.param[data-p="etaP"]').forEach(e=>e.classList.remove('disabled'));}
+  recompute();
+}
+function reset(){
+  $('Pboil').value=8;$('T3').value=480;$('Pcond').value=8;$('etaT').value=85;$('etaP').value=88;$('mdot').value=50;
+  setMode('ideal');
+}
+function toggleRun(){running=!running; $('btnRun').textContent=running?'⏸ 暂停':'▶ 运行';}
+
+// 启动
+window.addEventListener('load',()=>{
+  initThree();
+  bindSliders();
+  $('modeIdeal').addEventListener('click',()=>setMode('ideal'));
+  $('modeActual').addEventListener('click',()=>setMode('actual'));
+  $('btnReset').addEventListener('click',reset);
+  $('btnRun').addEventListener('click',toggleRun);
+  setMode('ideal');
+  // 等图表容器有尺寸后再画一次
+  setTimeout(recompute,50);
+});
+</script>
+</body>
+</html>
