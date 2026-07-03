@@ -98,6 +98,20 @@
   input[type=range]:disabled{opacity:.45;}
   .param.disabled{opacity:.55;}
 
+  /* ===== 快捷工况按钮 ===== */
+  .presets{display:grid; grid-template-columns:1fr 1fr; gap:7px; margin-bottom:16px;}
+  .preset{
+    background:linear-gradient(180deg,#16264a,#101d36); border:1px solid var(--border);
+    border-radius:9px; padding:8px 9px; cursor:pointer; text-align:left; transition:.15s; position:relative; overflow:hidden;
+  }
+  .preset:hover{border-color:#3a5bb0; transform:translateY(-1px); background:linear-gradient(180deg,#1b2f5a,#142244);}
+  .preset.active{border-color:var(--accent); box-shadow:0 0 0 1px var(--accent), 0 0 14px rgba(255,138,30,.25);
+    background:linear-gradient(180deg,#2a2236,#1a1626);}
+  .preset .pi{font-size:15px; line-height:1;}
+  .preset .pn{font-size:11.5px; font-weight:700; color:var(--text); margin-top:3px;}
+  .preset .ps{font-size:9.5px; color:var(--dim); margin-top:2px; font-variant-numeric:tabular-nums;}
+  .preset .pe{position:absolute; top:6px; right:7px; font-size:9px; color:var(--good); font-weight:700; font-variant-numeric:tabular-nums;}
+
   /* ===== 中央 3D 舞台 ===== */
   .stage{position:relative; min-height:0; background:radial-gradient(circle at 50% 40%,#0e1f3a 0%,#070d1a 75%);}
   #three{width:100%; height:100%; display:block;}
@@ -188,6 +202,9 @@
   <div class="main">
     <!-- ===== 左：参数面板 ===== -->
     <aside class="panel left">
+      <div class="sec-title"><span class="dot"></span>快捷工况 <span class="en">Presets</span></div>
+      <div class="presets" id="presetGrid"></div>
+
       <div class="sec-title"><span class="dot"></span>工况参数设置 <span class="en">Parameters</span></div>
       <div id="errBox" class="err"></div>
 
@@ -403,17 +420,22 @@ function superheated(P,T){
   let pa=Ps[0],pb=Ps[0];
   if(P>=Ps[Ps.length-1]){pa=Ps[Ps.length-1];pb=pa;}
   else if(P>Ps[0]){for(let i=0;i<Ps.length-1;i++)if(P>=Ps[i]&&P<=Ps[i+1]){pa=Ps[i];pb=Ps[i+1];break;}}
-  const Ts=[...new Set(SUP.map(r=>r[1]))].sort((a,b)=>a-b);
-  let tLow=T,tHigh=T;
-  if(T<=Ts[0]){tLow=Ts[0];tHigh=Ts[1]||Ts[0];}
-  else if(T>=Ts[Ts.length-1]){tLow=Ts[Ts.length-2]||Ts[0];tHigh=Ts[Ts.length-1];}
-  else{for(let i=0;i<Ts.length-1;i++)if(T>=Ts[i]&&T<=Ts[i+1]){tLow=Ts[i];tHigh=Ts[i+1];break;}}
-  function lookup(p,t){const rows=SUP.filter(r=>r[0]===p); if(!rows.length){const any=SUP.filter(r=>r[1]===t);return{h:any[0][2],s:any[0][3]};}
-    const [a,b]=bracketByCol(rows,t,1); if(a===b)return{h:a[2],s:a[3]}; const f=(t-a[1])/(b[1]-a[1]); return{h:a[2]+f*(b[2]-a[2]),s:a[3]+f*(b[3]-a[3])};}
-  const A=lookup(pa,tLow),B=lookup(pa,tHigh),C=lookup(pb,tLow),D=lookup(pb,tHigh);
-  const ft=tHigh===tLow?0:(T-tLow)/(tHigh-tLow), fp=pb===pa?0:(P-pa)/(pb-pa);
-  const h=(1-ft)*((1-fp)*A.h+fp*C.h)+ft*((1-fp)*B.h+fp*D.h);
-  const s=(1-ft)*((1-fp)*A.s+fp*C.s)+ft*((1-fp)*B.s+fp*D.s);
+  // 按压力查值：在表内插值；T 落在 Tsat 与表最低温度之间时，用饱和点作锚点过渡（避免外推失真）
+  function lookup(p,t){
+    const rows=SUP.filter(r=>r[0]===p); if(!rows.length)return{h:sat.hg,s:sat.sg};
+    const tmin=Math.min(...rows.map(r=>r[1]));
+    if(t<tmin){
+      const r0=rows.reduce((a,b)=>a[1]<b[1]?a:b);
+      if(t<=sat.T)return{h:sat.hg,s:sat.sg};
+      const f=(t-sat.T)/(tmin-sat.T);
+      return{h:sat.hg+f*(r0[2]-sat.hg),s:sat.sg+f*(r0[3]-sat.sg)};
+    }
+    const [a,b]=bracketByCol(rows,t,1); if(a===b)return{h:a[2],s:a[3]};
+    const f=(t-a[1])/(b[1]-a[1]); return{h:a[2]+f*(b[2]-a[2]),s:a[3]+f*(b[3]-a[3])};
+  }
+  const A=lookup(pa,T), B=lookup(pb,T);
+  const fp=pb===pa?0:(P-pa)/(pb-pa);
+  const h=A.h+(B.h-A.h)*fp, s=A.s+(B.s-A.s)*fp;
   return {h,s,v:R_STEAM*(T+273.15)/P,T,region:'superheated',Tsat:sat.T};
 }
 
@@ -595,8 +617,11 @@ function initThree(){
   renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:false});
   renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
   renderer.setClearColor(0x070d1a,1);
+  renderer.toneMapping=THREE.ACESFilmicToneMapping;        // 电影级色调映射
+  renderer.toneMappingExposure=1.05;
+  renderer.outputEncoding=THREE.sRGBEncoding;
   scene=new THREE.Scene();
-  scene.fog=new THREE.Fog(0x070d1a,18,46);
+  scene.fog=new THREE.Fog(0x070d1a,22,56);
   camera=new THREE.PerspectiveCamera(45,1,0.1,200);
   camera.position.set(11,7,13);
   controls=new THREE.OrbitControls(camera,canvas);
@@ -604,12 +629,25 @@ function initThree(){
   controls.target.set(-0.8,0.8,0);controls.minDistance=6;controls.maxDistance=32;
   clock=new THREE.Clock();
 
-  // 光照
-  scene.add(new THREE.AmbientLight(0x4a5a82,0.55));
-  const key=new THREE.DirectionalLight(0xffffff,0.85); key.position.set(8,14,8); scene.add(key);
-  const fill=new THREE.DirectionalLight(0x5577cc,0.4); fill.position.set(-10,4,-6); scene.add(fill);
-  boilerLight=new THREE.PointLight(0xff7a2f,1.6,14); boilerLight.position.set(-4.2,1.6,0.6); scene.add(boilerLight);
-  condLight=new THREE.PointLight(0x3fa7f6,0.9,12); condLight.position.set(-0.4,0.4,0.9); scene.add(condLight);
+  // 环境贴图（程序化渐变 → PMREM）让金属表面获得真实反射
+  const pmrem=new THREE.PMREMGenerator(renderer); pmrem.compileEquirectangularShader();
+  const ec=document.createElement('canvas'); ec.width=512; ec.height=256;
+  const ex=ec.getContext('2d');
+  const g=ex.createLinearGradient(0,0,0,256);
+  g.addColorStop(0,'#465782'); g.addColorStop(0.45,'#1b2742'); g.addColorStop(1,'#080d18');
+  ex.fillStyle=g; ex.fillRect(0,0,512,256);
+  ex.fillStyle='rgba(255,226,182,0.95)'; ex.beginPath(); ex.arc(120,60,34,0,7); ex.fill();   // 暖光
+  ex.fillStyle='rgba(172,208,255,0.75)'; ex.beginPath(); ex.arc(400,55,28,0,7); ex.fill();   // 冷光
+  const envTex=new THREE.CanvasTexture(ec); envTex.mapping=THREE.EquirectangularReflectionMapping;
+  scene.environment=pmrem.fromEquirectangular(envTex).texture;
+  envTex.dispose(); pmrem.dispose();
+
+  // 光照：半球 + 暖主光 + 冷轮廓光 + 点光
+  scene.add(new THREE.HemisphereLight(0x9fb0d8,0x0a1020,0.55));
+  const key=new THREE.DirectionalLight(0xfff2e0,0.9); key.position.set(8,14,8); scene.add(key);
+  const rim=new THREE.DirectionalLight(0x6f8fd0,0.55); rim.position.set(-9,5,-9); scene.add(rim);
+  boilerLight=new THREE.PointLight(0xff7a2f,1.8,16,1.6); boilerLight.position.set(-4.2,1.6,0.8); scene.add(boilerLight);
+  condLight=new THREE.PointLight(0x3fa7f6,1.0,14,1.6); condLight.position.set(-0.4,0.4,1.0); scene.add(condLight);
 
   // 星空背景
   const starGeo=new THREE.BufferGeometry();
@@ -618,111 +656,132 @@ function initThree(){
   starGeo.setAttribute('position',new THREE.Float32BufferAttribute(sp,3));
   scene.add(new THREE.Points(starGeo,new THREE.PointsMaterial({color:0x9fb4d8,size:0.18,transparent:true,opacity:.7})));
 
-  // 地面圆盘（平台）
-  const plat=new THREE.Mesh(new THREE.CylinderGeometry(9,9.4,0.3,64),
-    new THREE.MeshStandardMaterial({color:0x0e1a30,metalness:.4,roughness:.7}));
+  // 反光平台（深色金属，反射环境贴图）
+  const plat=new THREE.Mesh(new THREE.CylinderGeometry(9,9.4,0.3,72),
+    new THREE.MeshStandardMaterial({color:0x0c1830,metalness:0.9,roughness:0.4,envMapIntensity:1.0}));
   plat.position.y=-2.6; scene.add(plat);
-  // 平台发光圆环
-  const ring=new THREE.Mesh(new THREE.RingGeometry(8.9,9.05,64),
-    new THREE.MeshBasicMaterial({color:0x2a4060,transparent:true,opacity:.55,side:THREE.DoubleSide}));
+  const ring=new THREE.Mesh(new THREE.RingGeometry(8.85,9.08,72),
+    new THREE.MeshBasicMaterial({color:0x2a4060,transparent:true,opacity:.6,side:THREE.DoubleSide}));
   ring.rotation.x=-Math.PI/2; ring.position.y=-2.43; scene.add(ring);
+  const grid=new THREE.GridHelper(18,18,0x1c2e4e,0x13213b); grid.position.y=-2.44; grid.material.transparent=true; grid.material.opacity=0.5; scene.add(grid);
+
   buildDevice();
   buildPipeAndParticles();
+  makeSteam();
   resize();
   window.addEventListener('resize',resize);
   animate();
 }
-// 修正上面 ring 的颜色（避免语法占位）
-// （已用合法值覆盖）
 
 function metalMat(color,metal=0.6,rough=0.45,emi=0,emiC=0x000000){
   return new THREE.MeshStandardMaterial({color,metalness:metal,roughness:rough,emissive:emiC,emissiveIntensity:emi});
+}
+/* 高反射金属（用于受环境贴图影响明显的结构件） */
+function steel(color,metal=0.85,rough=0.32){ return new THREE.MeshStandardMaterial({color,metalness:metal,roughness:rough,envMapIntensity:1.15}); }
+/* 法兰环（沿 x 轴的管道接头） */
+function flangeRing(parent,r,tube,pos){ const f=new THREE.Mesh(new THREE.TorusGeometry(r,tube,10,28),steel(0x9aacc8,0.9,0.25));
+  f.rotation.y=Math.PI/2; f.position.set(pos[0],pos[1],pos[2]); parent.add(f); return f; }
+/* 设备支座（加到 scene，世界坐标） */
+function pedestal(worldX,topY,z=0){ const h=topY+2.45;
+  const p=new THREE.Mesh(new THREE.BoxGeometry(0.34,h,0.34),metalMat(0x1c2940,0.5,0.6)); p.position.set(worldX,topY-h/2,z); scene.add(p);
+  const bp=new THREE.Mesh(new THREE.BoxGeometry(0.6,0.1,0.6),metalMat(0x243450,0.5,0.6)); bp.position.set(worldX,-2.4,z); scene.add(bp); }
+/* 状态指示灯 */
+function led(parent,x,y,z,color){ const m=new THREE.MeshStandardMaterial({color,emissive:color,emissiveIntensity:2.4,metalness:0,roughness:0.4});
+  const s=new THREE.Mesh(new THREE.SphereGeometry(0.055,12,10),m); s.position.set(x,y,z); parent.add(s); return s; }
+
+/* 冷凝器排气蒸汽（柔光精灵） */
+function makeSoftTex(){ const c=document.createElement('canvas');c.width=64;c.height=64;const x=c.getContext('2d');
+  const g=x.createRadialGradient(32,32,1,32,32,30); g.addColorStop(0,'rgba(225,238,255,0.85)');g.addColorStop(1,'rgba(225,238,255,0)');
+  x.fillStyle=g;x.fillRect(0,0,64,64); return new THREE.CanvasTexture(c);}
+let steamGroup;
+function makeSteam(){
+  steamGroup=new THREE.Group(); const tex=makeSoftTex();
+  for(let i=0;i<10;i++){
+    const s=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,opacity:0,depthWrite:false}));
+    s.userData={t:Math.random(),dx:(Math.random()*2-1)*0.3}; s.scale.set(0.8,0.8,1); steamGroup.add(s);
+  }
+  steamGroup.position.set(0,0.45,0.95); scene.add(steamGroup);
 }
 
 function buildDevice(){
   // —— 锅炉（炉膛 + 汽包）位于 x≈-4.2 ——
   const boiler=new THREE.Group(); boiler.position.set(-4.2,0,0);
-  // 炉膛
-  const furnace=new THREE.Mesh(new THREE.BoxGeometry(2.0,3.0,1.6),
-    metalMat(0x2a3550,0.5,0.6));
+  const furnace=new THREE.Mesh(new THREE.BoxGeometry(2.0,3.0,1.6),steel(0x26324d,0.7,0.45));
   furnace.position.y=0.3; boiler.add(furnace);
-  // 炉膛开口（发光）
+  // 保温层环箍
+  for(const yy of [-0.3,0.9,1.5]){ const band=new THREE.Mesh(new THREE.BoxGeometry(2.05,0.1,1.65),steel(0x3a4a6a,0.8,0.4)); band.position.y=yy; boiler.add(band);}
+  // 炉膛火焰面（前后）
   flameMat=new THREE.MeshBasicMaterial({color:0xff7a2f,transparent:true,opacity:0.9});
-  const flame=new THREE.Mesh(new THREE.PlaneGeometry(1.5,2.2),flameMat);
-  flame.position.set(0,0.3,0.81); boiler.add(flame);
-  const flame2=flame.clone(); flame2.position.z=-0.81; flame2.rotation.y=Math.PI; boiler.add(flame2);
+  const flame=new THREE.Mesh(new THREE.PlaneGeometry(1.5,2.2),flameMat); flame.position.set(0,0.3,0.806); boiler.add(flame);
+  const flame2=flame.clone(); flame2.position.z=-0.806; flame2.rotation.y=Math.PI; boiler.add(flame2);
   window.__flames=[flame,flame2];
-  // 汽包（顶部圆柱）
-  const drum=new THREE.Mesh(new THREE.CylinderGeometry(0.7,0.7,2.0,24),
-    metalMat(0x3a4a6a,0.6,0.4)); drum.rotation.z=Math.PI/2; drum.position.y=2.2; boiler.add(drum);
-  const drumCap=new THREE.Mesh(new THREE.SphereGeometry(0.7,20,12,0,Math.PI*2,0,Math.PI/2),
-    metalMat(0x4a5a7a));drumCap.position.set(1.0,2.2,0);drumCap.rotation.z=-Math.PI/2;boiler.add(drumCap);
-  // 炉膛烟囱
-  const stack=new THREE.Mesh(new THREE.CylinderGeometry(0.18,0.22,1.6,16),
-    metalMat(0x3a4a6a)); stack.position.set(-0.6,2.5,0); boiler.add(stack);
-  // 标签
+  // 观察窗（发光圆）
+  const door=new THREE.Mesh(new THREE.CircleGeometry(0.26,24),new THREE.MeshBasicMaterial({color:0xffb24a,transparent:true,opacity:0.85}));
+  door.position.set(0.62,-0.2,0.807); boiler.add(door);
+  // 汽包（顶部卧式圆柱）+ 法兰 + 上升管
+  const drum=new THREE.Mesh(new THREE.CylinderGeometry(0.7,0.7,2.0,28),steel(0x42546f,0.8,0.35)); drum.rotation.z=Math.PI/2; drum.position.y=2.2; boiler.add(drum);
+  flangeRing(boiler,0.72,0.06,[1.0,2.2,0]); flangeRing(boiler,0.72,0.06,[-1.0,2.2,0]);
+  for(const xx of [-0.5,0.5]){ const rz=new THREE.Mesh(new THREE.CylinderGeometry(0.1,0.1,0.5,14),steel(0x5a6a86,0.8,0.35)); rz.position.set(xx,2.0,0); boiler.add(rz);}
+  // 烟囱
+  const stack=new THREE.Mesh(new THREE.CylinderGeometry(0.18,0.24,1.8,18),steel(0x3a4a6a,0.8,0.4)); stack.position.set(-0.75,2.75,0); boiler.add(stack);
+  led(boiler,0.9,-0.85,0.81,0xff8a1e);
+  pedestal(-4.9,-1.2); pedestal(-3.5,-1.2);
   boiler.add(makeLabel('锅炉 BOILER',-1.8,0xFF8A1E));
   scene.add(boiler);
 
   // —— 汽轮机 + 发电机（水平，y≈3.0）—— 暴露式双级转子，可见旋转
   const turb=new THREE.Group(); turb.position.set(-0.4,3.0,0);
-  // 主轴
-  const tshaft=new THREE.Mesh(new THREE.CylinderGeometry(0.13,0.13,3.0,16),metalMat(0xbfcde6,0.9,0.25));
+  const tshaft=new THREE.Mesh(new THREE.CylinderGeometry(0.13,0.13,3.0,16),steel(0xc6d2e8,0.9,0.22));
   tshaft.rotation.z=Math.PI/2; turb.add(tshaft);
   // 两端蜗壳/支撑（截锥）
-  const h1=new THREE.Mesh(new THREE.CylinderGeometry(0.6,0.32,0.7,22),metalMat(0x46566f,0.7,0.35));
-  h1.rotation.z=Math.PI/2; h1.position.x=-1.15; turb.add(h1);
-  const h2=new THREE.Mesh(new THREE.CylinderGeometry(0.32,0.6,0.7,22),metalMat(0x46566f,0.7,0.35));
-  h2.rotation.z=Math.PI/2; h2.position.x=1.15; turb.add(h2);
-  // 转子（2 级 × 7 叶片 = 14 片，叶尖在端壳之间外露可旋转）
+  const h1=new THREE.Mesh(new THREE.CylinderGeometry(0.6,0.32,0.7,24),steel(0x46566f,0.85,0.32)); h1.rotation.z=Math.PI/2; h1.position.x=-1.15; turb.add(h1);
+  const h2=new THREE.Mesh(new THREE.CylinderGeometry(0.32,0.6,0.7,24),steel(0x46566f,0.85,0.32)); h2.rotation.z=Math.PI/2; h2.position.x=1.15; turb.add(h2);
+  flangeRing(turb,0.62,0.05,[-1.5,0,0]); flangeRing(turb,0.62,0.05,[1.5,0,0]);
+  // 转子（2 级 × 7 叶片）
   turbineRotor=new THREE.Group();
   for(const cx of [-0.55,0.55]){
-    const hub=new THREE.Mesh(new THREE.CylinderGeometry(0.22,0.22,0.24,18),metalMat(0x7a8aa8,0.8,0.3));
-    hub.rotation.z=Math.PI/2; hub.position.x=cx; turbineRotor.add(hub);
-    for(let b=0;b<7;b++){const blade=new THREE.Mesh(new THREE.BoxGeometry(0.07,0.5,0.18),
-      metalMat(0xc6d4ec,0.6,0.3));const a=b/7*Math.PI*2;
+    const hub=new THREE.Mesh(new THREE.CylinderGeometry(0.22,0.22,0.24,18),steel(0x7a8aa8,0.9,0.28)); hub.rotation.z=Math.PI/2; hub.position.x=cx; turbineRotor.add(hub);
+    for(let b=0;b<7;b++){const blade=new THREE.Mesh(new THREE.BoxGeometry(0.07,0.5,0.18),steel(0xd6e2f5,0.7,0.22));const a=b/7*Math.PI*2;
       blade.position.set(cx,Math.cos(a)*0.32,Math.sin(a)*0.32);blade.rotation.x=a;turbineRotor.add(blade);}
   }
   turb.add(turbineRotor);
+  led(turb,-1.15,0.5,0,0x36D399);
   turb.add(makeLabel('汽轮机 TURBINE',-1.7,0xFF6B35));
   scene.add(turb);
 
   // 发电机
   const gen=new THREE.Group(); gen.position.set(3.0,3.0,0);
-  const genBody=new THREE.Mesh(new THREE.CylinderGeometry(0.55,0.55,1.4,24),
-    metalMat(0x394a64,0.6,0.4)); genBody.rotation.z=Math.PI/2; gen.add(genBody);
-  const shaft=new THREE.Mesh(new THREE.CylinderGeometry(0.08,0.08,0.5,12),metalMat(0x9fb0cc,0.9,0.2));
-  shaft.rotation.z=Math.PI/2; shaft.position.x=-0.95; gen.add(shaft);
+  const genBody=new THREE.Mesh(new THREE.CylinderGeometry(0.55,0.55,1.4,28),steel(0x44567a,0.85,0.34)); genBody.rotation.z=Math.PI/2; gen.add(genBody);
+  // 散热翅环
+  for(const fx of [-0.4,0,0.4]){ flangeRing(gen,0.56,0.035,[fx,0,0]); }
+  const shaft=new THREE.Mesh(new THREE.CylinderGeometry(0.08,0.08,0.5,12),steel(0xc6d2e8,0.9,0.2)); shaft.rotation.z=Math.PI/2; shaft.position.x=-0.95; gen.add(shaft);
+  led(gen,0.7,0.45,0,0x36D399);
   gen.add(makeLabel('发电机 GEN',-1.3,0xFFB05C));
   scene.add(gen);
 
-  // —— 冷凝器（水平壳管式，底部）—— 去掉内部密集管束，改为壳体+端水室+顶部接管
+  // —— 冷凝器（水平壳管式，底部）—— 壳体+端水室+顶部接管
   const cond=new THREE.Group(); cond.position.set(-0.2,-0.6,0);
-  const shell=new THREE.Mesh(new THREE.CylinderGeometry(0.8,0.8,3.4,24),
-    metalMat(0x2f4a6a,0.5,0.5)); shell.rotation.z=Math.PI/2; cond.add(shell);
-  // 两端水室
-  const e1=new THREE.Mesh(new THREE.CylinderGeometry(0.85,0.85,0.25,24),metalMat(0x244060,0.5,0.5));
-  e1.rotation.z=Math.PI/2; e1.position.x=-1.825; cond.add(e1);
-  const e2=new THREE.Mesh(new THREE.CylinderGeometry(0.85,0.85,0.25,24),metalMat(0x244060,0.5,0.5));
-  e2.rotation.z=Math.PI/2; e2.position.x=1.825; cond.add(e2);
-  // 顶部接管
-  const noz=new THREE.Mesh(new THREE.CylinderGeometry(0.18,0.18,0.5,14),metalMat(0x4a5a76,0.6,0.4));
-  noz.position.set(0.6,0.9,0); cond.add(noz);
-  const noz2=new THREE.Mesh(new THREE.CylinderGeometry(0.18,0.18,0.5,14),metalMat(0x4a5a76,0.6,0.4));
-  noz2.position.set(-0.6,0.9,0); cond.add(noz2);
+  const shell=new THREE.Mesh(new THREE.CylinderGeometry(0.8,0.8,3.4,28),steel(0x335070,0.7,0.38)); shell.rotation.z=Math.PI/2; cond.add(shell);
+  flangeRing(cond,0.82,0.05,[-1.5,0,0]); flangeRing(cond,0.82,0.05,[1.5,0,0]);
+  const e1=new THREE.Mesh(new THREE.CylinderGeometry(0.85,0.85,0.25,28),steel(0x244060,0.8,0.38)); e1.rotation.z=Math.PI/2; e1.position.x=-1.825; cond.add(e1);
+  const e2=new THREE.Mesh(new THREE.CylinderGeometry(0.85,0.85,0.25,28),steel(0x244060,0.8,0.38)); e2.rotation.z=Math.PI/2; e2.position.x=1.825; cond.add(e2);
+  const noz=new THREE.Mesh(new THREE.CylinderGeometry(0.18,0.18,0.5,16),steel(0x5a6a86,0.8,0.35)); noz.position.set(0.6,0.9,0); cond.add(noz);
+  const noz2=new THREE.Mesh(new THREE.CylinderGeometry(0.18,0.18,0.5,16),steel(0x5a6a86,0.8,0.35)); noz2.position.set(-0.6,0.9,0); cond.add(noz2);
+  led(cond,0,0.5,0.8,0x3fa7f6);
+  pedestal(-1.6,-1.4); pedestal(1.2,-1.4);
   cond.add(makeLabel('冷凝器 CONDENSER',-1.35,0x3FA7F6));
   scene.add(cond);
 
   // —— 给水泵（小立式）——
   const pump=new THREE.Group(); pump.position.set(-3.6,-1.7,0);
-  const pHousing=new THREE.Mesh(new THREE.CylinderGeometry(0.45,0.45,0.9,20),
-    metalMat(0x46566f,0.6,0.4)); pHousing.position.y=0.2; pump.add(pHousing);
+  const pHousing=new THREE.Mesh(new THREE.CylinderGeometry(0.45,0.45,0.9,22),steel(0x46566f,0.85,0.34)); pHousing.position.y=0.2; pump.add(pHousing);
+  flangeRing(pump,0.46,0.04,[0,0.65,0]);
   pumpImpeller=new THREE.Group();
-  for(let b=0;b<6;b++){const blade=new THREE.Mesh(new THREE.BoxGeometry(0.06,0.32,0.12),
-    metalMat(0x9fb0cc,0.7,0.3));const a=b/6*Math.PI*2;blade.position.set(Math.cos(a)*0.22,0,Math.sin(a)*0.22);blade.rotation.y=a;pumpImpeller.add(blade);}
+  for(let b=0;b<6;b++){const blade=new THREE.Mesh(new THREE.BoxGeometry(0.06,0.32,0.12),steel(0xc6d2e8,0.7,0.25));const a=b/6*Math.PI*2;blade.position.set(Math.cos(a)*0.22,0,Math.sin(a)*0.22);blade.rotation.y=a;pumpImpeller.add(blade);}
   pumpImpeller.position.y=0.25; pump.add(pumpImpeller);
-  const motor=new THREE.Mesh(new THREE.CylinderGeometry(0.35,0.35,0.5,18),metalMat(0x5a3a2a,0.3,0.7));
-  motor.position.y=0.9; pump.add(motor);
+  const motor=new THREE.Mesh(new THREE.CylinderGeometry(0.35,0.35,0.5,20),steel(0x5a3a2a,0.5,0.55)); motor.position.y=0.9; pump.add(motor);
+  const base=new THREE.Mesh(new THREE.BoxGeometry(0.9,0.12,0.9),metalMat(0x243450,0.5,0.6)); base.position.y=-0.32; pump.add(base);
+  led(pump,0.35,0.95,0,0xffd23f);
   pump.add(makeLabel('给水泵 PUMP',1.3,0x6FB6F0));
   scene.add(pump);
 }
@@ -834,6 +893,12 @@ function animate(){
     if(window.__flames)window.__flames.forEach(f=>f.material.opacity=THREE.MathUtils.clamp(fi,0.2,1));
     boilerLight.intensity=1.2+0.8*fi;
     condLight.intensity=0.5+0.6*(simState.mdot/200);
+    // 冷凝器排气蒸汽
+    if(steamGroup){ steamGroup.children.forEach(s=>{
+      s.userData.t+=dt*0.35; if(s.userData.t>1)s.userData.t-=1;
+      const t=s.userData.t; s.position.set(s.userData.dx*t*1.2, t*1.7, 0);
+      s.material.opacity=(1-t)*0.30; const sc=0.5+t*1.6; s.scale.set(sc,sc,1);
+    });}
   }
   controls.update();
   renderer.render(scene,camera);
@@ -859,7 +924,7 @@ function fmt(v,d=1){ if(v===null||v===undefined||isNaN(v))return '—'; const f=
 
 function applyT3Range(){
   const Tsat=satByP(params.Pboil*1000).T;
-  const minT=Math.max(200,Math.ceil(Tsat+10));
+  const minT=Math.max(150,Math.floor(Tsat));   // 允许低至饱和（饱和蒸汽循环）
   $('T3').min=minT; $('T3minLbl').textContent=minT;
   if(params.T3<minT){params.T3=minT;$('T3').value=minT;$('vT3').textContent=minT;}
 }
@@ -914,22 +979,54 @@ function recompute(){
 
 function bindSliders(){
   for(const id of ['Pboil','T3','Pcond','etaT','etaP','mdot']){
-    $(id).addEventListener('input',()=>recompute());
+    $(id).addEventListener('input',()=>{ clearPreset(); recompute(); });
   }
 }
-function setMode(m){
-  mode=m;
-  $('modeIdeal').classList.toggle('active',m==='ideal');
-  $('modeActual').classList.toggle('active',m==='actual');
-  const etaEls=['etaT','etaP'];
-  if(m==='ideal'){$('etaT').value=100;$('etaP').value=100;$('etaT').disabled=true;$('etaP').disabled=true;
-    document.querySelectorAll('.param[data-p="etaT"],.param[data-p="etaP"]').forEach(e=>e.classList.add('disabled'));}
-  else{$('etaT').disabled=false;$('etaP').disabled=false;
-    document.querySelectorAll('.param[data-p="etaT"],.param[data-p="etaP"]').forEach(e=>e.classList.remove('disabled'));}
-  recompute();
+function updateModeUI(){
+  $('modeIdeal').classList.toggle('active',mode==='ideal');
+  $('modeActual').classList.toggle('active',mode==='actual');
+  const on=mode==='actual';
+  $('etaT').disabled=!on; $('etaP').disabled=!on;
+  document.querySelectorAll('.param[data-p="etaT"],.param[data-p="etaP"]').forEach(e=>e.classList.toggle('disabled',!on));
+  if(!on){ $('etaT').value=100; $('etaP').value=100; }
+}
+function setMode(m){ mode=m; updateModeUI(); recompute(); }
+
+/* 快捷工况预设（教学 + 工程常用）sub 显示：P MPa / T ℃ / Pcond kPa */
+const PRESETS=[
+  {key:'basic',icon:'📚',name:'教学基础例',sub:'3 / 400 / 10',Pboil:3,  T3:400,Pcond:10,mdot:20},
+  {key:'mid',  icon:'🏭',name:'中压循环',  sub:'5 / 500 / 10',Pboil:5,  T3:500,Pcond:10,mdot:30},
+  {key:'subhp',icon:'⚡',name:'高压火电',  sub:'12 / 540 / 5',Pboil:12, T3:540,Pcond:5, actual:true,etaT:88,etaP:85,mdot:80},
+  {key:'suphp',icon:'🔥',name:'超高压火电',sub:'16.5 / 570 / 5',Pboil:16.5,T3:570,Pcond:5, actual:true,etaT:88,etaP:85,mdot:120},
+  {key:'nuc',  icon:'☢️',name:'沸水堆饱和',sub:'7 / 饱和 / 6',Pboil:7,  T3:0,  Pcond:6, actual:true,etaT:85,etaP:80,mdot:60},
+  {key:'lowv', icon:'🧪',name:'低真空对比',sub:'3 / 400 / 50',Pboil:3,  T3:400,Pcond:50,mdot:20},
+];
+function renderPresets(){
+  const grid=$('presetGrid'); grid.innerHTML='';
+  for(const p of PRESETS){
+    const b=document.createElement('button'); b.className='preset'; b.dataset.key=p.key;
+    b.innerHTML=`<span class="pi">${p.icon}</span><div class="pn">${p.name}</div><div class="ps">${p.sub} kPa·℃·MPa</div>`;
+    b.title=`锅炉 ${p.Pboil} MPa · 过热 ${p.T3>0?p.T3:'饱和'} ℃ · 冷凝 ${p.Pcond} kPa`;
+    b.addEventListener('click',()=>applyPreset(p));
+    grid.appendChild(b);
+  }
+}
+function activePreset(p){ document.querySelectorAll('.preset').forEach(b=>b.classList.toggle('active',b.dataset.key===p.key)); }
+function clearPreset(){ document.querySelectorAll('.preset').forEach(b=>b.classList.remove('active')); }
+function applyPreset(p){
+  mode=p.actual?'actual':'ideal'; updateModeUI();
+  $('Pboil').value=p.Pboil; params.Pboil=p.Pboil;
+  applyT3Range();                                   // 先按新 Pboil 刷新 T3 下限
+  const T3val = p.T3>0 ? p.T3 : Math.floor(satByP(p.Pboil*1000).T); // nuclear 取饱和温度
+  $('T3').value=T3val; params.T3=T3val;
+  $('Pcond').value=p.Pcond;
+  if(p.actual){ $('etaT').value=p.etaT; $('etaP').value=p.etaP; }
+  $('mdot').value=p.mdot||50;
+  recompute(); activePreset(p);
 }
 function reset(){
   $('Pboil').value=8;$('T3').value=480;$('Pcond').value=8;$('etaT').value=85;$('etaP').value=88;$('mdot').value=50;
+  clearPreset();
   setMode('ideal');
 }
 function toggleRun(){running=!running; $('btnRun').textContent=running?'⏸ 暂停':'▶ 运行';}
@@ -938,6 +1035,7 @@ function toggleRun(){running=!running; $('btnRun').textContent=running?'⏸ 暂�
 window.addEventListener('load',()=>{
   initThree();
   bindSliders();
+  renderPresets();
   $('modeIdeal').addEventListener('click',()=>setMode('ideal'));
   $('modeActual').addEventListener('click',()=>setMode('actual'));
   $('btnReset').addEventListener('click',reset);
