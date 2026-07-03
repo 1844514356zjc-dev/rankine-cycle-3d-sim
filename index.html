@@ -661,30 +661,30 @@ function buildDevice(){
   const stack=new THREE.Mesh(new THREE.CylinderGeometry(0.18,0.22,1.6,16),
     metalMat(0x3a4a6a)); stack.position.set(-0.6,2.5,0); boiler.add(stack);
   // 标签
-  boiler.add(makeLabel('锅炉 BOILER',-0.2,-1.0,0x000000));
+  boiler.add(makeLabel('锅炉 BOILER',-1.8,0xFF8A1E));
   scene.add(boiler);
 
-  // —— 汽轮机 + 发电机（水平，y≈3.0）——
+  // —— 汽轮机 + 发电机（水平，y≈3.0）—— 暴露式双级转子，可见旋转
   const turb=new THREE.Group(); turb.position.set(-0.4,3.0,0);
-  // 缸体
-  const casing=new THREE.Mesh(new THREE.CylinderGeometry(0.62,0.62,3.0,28),
-    metalMat(0x46566f,0.7,0.35)); casing.rotation.z=Math.PI/2; turb.add(casing);
-  // 进汽端/排汽端锥
-  const cone1=new THREE.Mesh(new THREE.CylinderGeometry(0.62,0.4,0.6,24),metalMat(0x394a64));
-  cone1.rotation.z=Math.PI/2; cone1.position.x=-1.8; turb.add(cone1);
-  const cone2=new THREE.Mesh(new THREE.CylinderGeometry(0.4,0.55,0.6,24),metalMat(0x394a64));
-  cone2.rotation.z=Math.PI/2; cone2.position.x=1.8; turb.add(cone2);
-  // 转子（旋转叶片组）
+  // 主轴
+  const tshaft=new THREE.Mesh(new THREE.CylinderGeometry(0.13,0.13,3.0,16),metalMat(0xbfcde6,0.9,0.25));
+  tshaft.rotation.z=Math.PI/2; turb.add(tshaft);
+  // 两端蜗壳/支撑（截锥）
+  const h1=new THREE.Mesh(new THREE.CylinderGeometry(0.6,0.32,0.7,22),metalMat(0x46566f,0.7,0.35));
+  h1.rotation.z=Math.PI/2; h1.position.x=-1.15; turb.add(h1);
+  const h2=new THREE.Mesh(new THREE.CylinderGeometry(0.32,0.6,0.7,22),metalMat(0x46566f,0.7,0.35));
+  h2.rotation.z=Math.PI/2; h2.position.x=1.15; turb.add(h2);
+  // 转子（2 级 × 7 叶片 = 14 片，叶尖在端壳之间外露可旋转）
   turbineRotor=new THREE.Group();
-  for(let i=0;i<4;i++){
-    const disc=new THREE.Mesh(new THREE.CylinderGeometry(0.45,0.45,0.08,22),
-      metalMat(0x6a7a98,0.8,0.3)); disc.rotation.z=Math.PI/2; disc.position.x=-0.9+i*0.6; turbineRotor.add(disc);
-    for(let b=0;b<10;b++){const blade=new THREE.Mesh(new THREE.BoxGeometry(0.04,0.5,0.12),
-      metalMat(0x9fb0cc,0.7,0.3));const a=b/10*Math.PI*2;
-      blade.position.set(-0.9+i*0.6,Math.cos(a)*0.42,Math.sin(a)*0.42);blade.rotation.x=a;turbineRotor.add(blade);}
+  for(const cx of [-0.55,0.55]){
+    const hub=new THREE.Mesh(new THREE.CylinderGeometry(0.22,0.22,0.24,18),metalMat(0x7a8aa8,0.8,0.3));
+    hub.rotation.z=Math.PI/2; hub.position.x=cx; turbineRotor.add(hub);
+    for(let b=0;b<7;b++){const blade=new THREE.Mesh(new THREE.BoxGeometry(0.07,0.5,0.18),
+      metalMat(0xc6d4ec,0.6,0.3));const a=b/7*Math.PI*2;
+      blade.position.set(cx,Math.cos(a)*0.32,Math.sin(a)*0.32);blade.rotation.x=a;turbineRotor.add(blade);}
   }
   turb.add(turbineRotor);
-  turb.add(makeLabel('汽轮机 TURBINE',0,-1.0,0x000000));
+  turb.add(makeLabel('汽轮机 TURBINE',-1.7,0xFF6B35));
   scene.add(turb);
 
   // 发电机
@@ -693,23 +693,24 @@ function buildDevice(){
     metalMat(0x394a64,0.6,0.4)); genBody.rotation.z=Math.PI/2; gen.add(genBody);
   const shaft=new THREE.Mesh(new THREE.CylinderGeometry(0.08,0.08,0.5,12),metalMat(0x9fb0cc,0.9,0.2));
   shaft.rotation.z=Math.PI/2; shaft.position.x=-0.95; gen.add(shaft);
-  gen.add(makeLabel('发电机 GEN',0,-1.0,0x000000));
+  gen.add(makeLabel('发电机 GEN',-1.3,0xFFB05C));
   scene.add(gen);
 
-  // —— 冷凝器（水平壳管式，底部）——
+  // —— 冷凝器（水平壳管式，底部）—— 去掉内部密集管束，改为壳体+端水室+顶部接管
   const cond=new THREE.Group(); cond.position.set(-0.2,-0.6,0);
-  const shell=new THREE.Mesh(new THREE.CylinderGeometry(0.85,0.85,3.6,28),
+  const shell=new THREE.Mesh(new THREE.CylinderGeometry(0.8,0.8,3.4,24),
     metalMat(0x2f4a6a,0.5,0.5)); shell.rotation.z=Math.PI/2; cond.add(shell);
-  // 管束
-  for(let i=-2;i<=2;i++)for(let j=-1;j<=1;j++){
-    const tube=new THREE.Mesh(new THREE.CylinderGeometry(0.07,0.07,3.4,10),
-      metalMat(0x6fb6f0,0.6,0.4,0.0,0x1a3a5a)); tube.rotation.z=Math.PI/2;
-    tube.position.set(0,j*0.35,i*0.0); // 沿长度方向排满
-    tube.position.y=j*0.4; tube.position.z=i*0.28; cond.add(tube);
-  }
-  const condEnd=new THREE.Mesh(new THREE.CylinderGeometry(0.85,0.85,0.2,28),metalMat(0x244060));
-  condEnd.rotation.z=Math.PI/2; condEnd.position.x=1.9; cond.add(condEnd);
-  cond.add(makeLabel('冷凝器 CONDENSER',0,-1.3,0x000000));
+  // 两端水室
+  const e1=new THREE.Mesh(new THREE.CylinderGeometry(0.85,0.85,0.25,24),metalMat(0x244060,0.5,0.5));
+  e1.rotation.z=Math.PI/2; e1.position.x=-1.825; cond.add(e1);
+  const e2=new THREE.Mesh(new THREE.CylinderGeometry(0.85,0.85,0.25,24),metalMat(0x244060,0.5,0.5));
+  e2.rotation.z=Math.PI/2; e2.position.x=1.825; cond.add(e2);
+  // 顶部接管
+  const noz=new THREE.Mesh(new THREE.CylinderGeometry(0.18,0.18,0.5,14),metalMat(0x4a5a76,0.6,0.4));
+  noz.position.set(0.6,0.9,0); cond.add(noz);
+  const noz2=new THREE.Mesh(new THREE.CylinderGeometry(0.18,0.18,0.5,14),metalMat(0x4a5a76,0.6,0.4));
+  noz2.position.set(-0.6,0.9,0); cond.add(noz2);
+  cond.add(makeLabel('冷凝器 CONDENSER',-1.35,0x3FA7F6));
   scene.add(cond);
 
   // —— 给水泵（小立式）——
@@ -722,21 +723,28 @@ function buildDevice(){
   pumpImpeller.position.y=0.25; pump.add(pumpImpeller);
   const motor=new THREE.Mesh(new THREE.CylinderGeometry(0.35,0.35,0.5,18),metalMat(0x5a3a2a,0.3,0.7));
   motor.position.y=0.9; pump.add(motor);
-  pump.add(makeLabel('给水泵 PUMP',0,-0.6,0x000000));
+  pump.add(makeLabel('给水泵 PUMP',1.3,0x6FB6F0));
   scene.add(pump);
 }
 
-/* 文字标签（Canvas 纹理精灵） */
-function makeLabel(text,yoff,color){
-  const c=document.createElement('canvas');c.width=256;c.height=64;
+/* 圆角矩形 */
+function roundRect(x,a,b,w,h,r){x.beginPath();x.moveTo(a+r,b);x.arcTo(a+w,b,a+w,b+h,r);
+  x.arcTo(a+w,b+h,a,b+h,r);x.arcTo(a,b+h,a,b,r);x.arcTo(a,b,a+w,b,r);x.closePath();}
+
+/* 文字标签（高对比度 Canvas 纹理精灵，depthTest:false 始终可见不被遮挡） */
+function makeLabel(text,yoff,accent){
+  accent=(accent===undefined)?0xFF8A1E:accent;
+  const W=512,H=128,c=document.createElement('canvas');c.width=W;c.height=H;
   const x=c.getContext('2d');
-  x.fillStyle='rgba(10,20,38,.78)';x.fillRect(0,0,256,64);
-  x.strokeStyle='rgba(120,150,200,.6)';x.lineWidth=2;x.strokeRect(2,2,252,60);
-  x.fillStyle='#cdd9ee';x.font='bold 26px sans-serif';x.textAlign='center';x.textBaseline='middle';
-  x.fillText(text,128,34);
-  const tex=new THREE.CanvasTexture(c);
-  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true}));
-  sp.scale.set(2.4,0.6,1); sp.position.y=yoff; return sp;
+  x.fillStyle='rgba(7,15,28,0.95)'; roundRect(x,6,6,W-12,H-12,22); x.fill();
+  x.fillStyle='#'+('000000'+accent.toString(16)).slice(-6); roundRect(x,6,6,16,H-12,7); x.fill();
+  x.strokeStyle='rgba(150,180,225,0.55)';x.lineWidth=2; roundRect(x,6,6,W-12,H-12,22); x.stroke();
+  x.fillStyle='#ffffff';x.font='700 50px -apple-system,Segoe UI,"PingFang SC",sans-serif';
+  x.textAlign='center';x.textBaseline='middle';
+  x.shadowColor='rgba(0,0,0,0.7)';x.shadowBlur=6; x.fillText(text,W/2+8,H/2);
+  const tex=new THREE.CanvasTexture(c); tex.anisotropy=4;
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,depthTest:false}));
+  sp.scale.set(3.0,0.75,1); sp.renderOrder=999; sp.position.y=yoff; return sp;
 }
 
 /* 管道（沿循环路径）+ 工质粒子 */
@@ -764,10 +772,6 @@ function buildPipeAndParticles(){
   const tubeGeo=new THREE.TubeGeometry(curve,260,0.12,10,true);
   const tubeMat=new THREE.MeshStandardMaterial({color:0x3a4a6a,metalness:0.6,roughness:0.45});
   scene.add(new THREE.Mesh(tubeGeo,tubeMat));
-  // 管道内壁发光线（提示流向）
-  const tubeInner=new THREE.Mesh(new THREE.TubeGeometry(curve,260,0.06,8,true),
-    new THREE.MeshBasicMaterial({color:0x2a3a5a,transparent:true,opacity:0.5}));
-  scene.add(tubeInner);
 
   // 颜色查表（按 u）
   const N=wp.length;
